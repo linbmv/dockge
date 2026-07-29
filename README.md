@@ -8,6 +8,9 @@ A fancy, easy-to-use and reactive self-hosted docker compose.yaml stack-oriented
 
 This fork's single-host homelab extensions and migration runbook are documented
 in [docs/homelab-deployment.zh-CN.md](docs/homelab-deployment.zh-CN.md).
+Its multi-architecture image is published only to
+`ghcr.io/linbmv/dockge:latest`; GitHub Actions does not log in to or push to
+Docker Hub.
 
 [![GitHub Repo stars](https://img.shields.io/github/stars/louislam/dockge?logo=github&style=flat)](https://github.com/louislam/dockge) [![Docker Pulls](https://img.shields.io/docker/pulls/louislam/dockge?logo=docker)](https://hub.docker.com/r/louislam/dockge/tags) [![Docker Image Version (latest semver)](https://img.shields.io/docker/v/louislam/dockge/latest?label=docker%20image%20ver.)](https://hub.docker.com/r/louislam/dockge/tags) [![GitHub last commit (branch)](https://img.shields.io/github/last-commit/louislam/dockge/master?logo=github)](https://github.com/louislam/dockge/commits/master/)
 
