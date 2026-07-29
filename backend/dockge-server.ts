@@ -37,6 +37,8 @@ import { AgentSocketHandler } from "./agent-socket-handler";
 import { AgentSocket } from "../common/agent-socket";
 import { ManageAgentSocketHandler } from "./socket-handlers/manage-agent-socket-handler";
 import { Terminal } from "./terminal";
+import dotenv from "dotenv";
+import { isIPv4 } from "node:net";
 
 export class DockgeServer {
     app : Express;
@@ -155,6 +157,25 @@ export class DockgeServer {
         this.config.dataDir = args.dataDir || process.env.DOCKGE_DATA_DIR || "./data/";
         this.config.stacksDir = args.stacksDir || process.env.DOCKGE_STACKS_DIR || defaultStacksDir;
         this.config.enableConsole = args.enableConsole || process.env.DOCKGE_ENABLE_CONSOLE === "true" || false;
+        this.config.defaultExternalNetwork = this.getSafeDockerName(
+            process.env.DOCKGE_DEFAULT_EXTERNAL_NETWORK || ""
+        );
+        this.config.publishedHostIPVariable = this.getSafeEnvironmentVariableName(
+            process.env.DOCKGE_PUBLISHED_HOST_IP_VARIABLE || "TS_HOST_IP"
+        );
+        this.config.publishedPortStart = this.getPublishedPortSetting(
+            "DOCKGE_PUBLISHED_PORT_START",
+            20000
+        );
+        this.config.publishedPortEnd = this.getPublishedPortSetting(
+            "DOCKGE_PUBLISHED_PORT_END",
+            39999
+        );
+        if (this.config.publishedPortStart > this.config.publishedPortEnd) {
+            log.warn("server", "DOCKGE_PUBLISHED_PORT_START is greater than DOCKGE_PUBLISHED_PORT_END; using 20000-39999.");
+            this.config.publishedPortStart = 20000;
+            this.config.publishedPortEnd = 39999;
+        }
         this.stacksDir = this.config.stacksDir;
 
         log.debug("server", this.config);
@@ -325,6 +346,49 @@ export class DockgeServer {
                 log.debug("terminal", "Terminal count: " + Terminal.getTerminalCount());
             }, 5000);
         }
+    }
+
+    private getPublishedPortSetting(name : string, fallback : number) : number {
+        const value = Number(process.env[name]);
+        if (!Number.isInteger(value) || value < 1 || value > 65535) {
+            if (process.env[name]) {
+                log.warn("server", `${name} must be an integer from 1 to 65535; using ${fallback}.`);
+            }
+            return fallback;
+        }
+        return value;
+    }
+
+    private getSafeDockerName(value : string) : string {
+        const normalized = value.trim();
+        if (!normalized) {
+            return "";
+        }
+        if (!/^[a-zA-Z0-9][a-zA-Z0-9_.-]*$/.test(normalized)) {
+            log.warn("server", "DOCKGE_DEFAULT_EXTERNAL_NETWORK is invalid; the default network is disabled.");
+            return "";
+        }
+        return normalized;
+    }
+
+    private getSafeEnvironmentVariableName(value : string) : string {
+        const normalized = value.trim();
+        if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(normalized)) {
+            log.warn("server", "DOCKGE_PUBLISHED_HOST_IP_VARIABLE is invalid; using TS_HOST_IP.");
+            return "TS_HOST_IP";
+        }
+        return normalized;
+    }
+
+    getPublishedHostIPValue() : string {
+        const globalEnvPath = path.join(this.stacksDir, "global.env");
+        if (!fs.existsSync(globalEnvPath)) {
+            return "";
+        }
+
+        const globalEnv = dotenv.parse(fs.readFileSync(globalEnvPath));
+        const value = globalEnv[this.config.publishedHostIPVariable]?.trim() || "";
+        return isIPv4(value) ? value : "";
     }
 
     async afterLogin(socket : DockgeSocket, user : User) {

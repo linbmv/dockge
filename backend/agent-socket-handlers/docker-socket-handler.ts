@@ -3,6 +3,7 @@ import { DockgeServer } from "../dockge-server";
 import { callbackError, callbackResult, checkLogin, DockgeSocket, ValidationError } from "../util-server";
 import { Stack } from "../stack";
 import { AgentSocket } from "../../common/agent-socket";
+import { allocatePublishedPort } from "../published-port-allocator";
 
 export class DockerSocketHandler extends AgentSocketHandler {
     create(socket : DockgeSocket, server : DockgeServer, agentSocket : AgentSocket) {
@@ -74,7 +75,6 @@ export class DockerSocketHandler extends AgentSocketHandler {
                 if (typeof(stackName) !== "string") {
                     throw new ValidationError("Stack name must be a string");
                 }
-
                 const stack = await Stack.getStack(server, stackName);
 
                 if (stack.isManagedByDockge) {
@@ -190,6 +190,27 @@ export class DockerSocketHandler extends AgentSocketHandler {
                 callbackResult({
                     ok: true,
                     msg: "Updated",
+                    msgi18n: true,
+                }, callback);
+                server.sendStackList();
+            } catch (e) {
+                callbackError(e, callback);
+            }
+        });
+
+        agentSocket.on("gitPullAndBuildStack", async (stackName : unknown, callback) => {
+            try {
+                checkLogin(socket);
+
+                if (typeof(stackName) !== "string") {
+                    throw new ValidationError("Stack name must be a string");
+                }
+
+                const stack = await Stack.getStack(server, stackName);
+                await stack.gitPullAndBuild(socket);
+                callbackResult({
+                    ok: true,
+                    msg: "gitPullAndBuildSuccess",
                     msgi18n: true,
                 }, callback);
                 server.sendStackList();
@@ -331,6 +352,37 @@ export class DockerSocketHandler extends AgentSocketHandler {
                 callbackError(e, callback);
             }
         });
+
+        agentSocket.on("getStackDefaults", async (callback) => {
+            try {
+                checkLogin(socket);
+                callbackResult({
+                    ok: true,
+                    defaults: {
+                        defaultExternalNetwork: server.config.defaultExternalNetwork,
+                        publishedHostIPVariable: server.config.publishedHostIPVariable,
+                        publishedHostIPValue: server.getPublishedHostIPValue(),
+                        publishedPortStart: server.config.publishedPortStart,
+                        publishedPortEnd: server.config.publishedPortEnd,
+                    },
+                }, callback);
+            } catch (e) {
+                callbackError(e, callback);
+            }
+        });
+
+        agentSocket.on("allocatePublishedPort", async (targetPort : unknown, protocol : unknown, currentEditorPorts : unknown, callback) => {
+            try {
+                checkLogin(socket);
+                const allocation = await allocatePublishedPort(server, targetPort, protocol, currentEditorPorts);
+                callbackResult({
+                    ok: true,
+                    allocation,
+                }, callback);
+            } catch (e) {
+                callbackError(e, callback);
+            }
+        });
     }
 
     async saveStack(server : DockgeServer, name : unknown, composeYAML : unknown, composeENV : unknown, isAdd : unknown) : Promise<Stack> {
@@ -354,4 +406,3 @@ export class DockerSocketHandler extends AgentSocketHandler {
     }
 
 }
-

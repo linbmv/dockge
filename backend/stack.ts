@@ -84,6 +84,7 @@ export class Stack {
             status: this._status,
             tags: [],
             isManagedByDockge: this.isManagedByDockge,
+            isGitRepository: this.isGitRepository,
             composeFileName: this._composeFileName,
             endpoint,
         };
@@ -107,15 +108,22 @@ export class Stack {
         return fs.existsSync(this.path) && fs.statSync(this.path).isDirectory();
     }
 
+    get isGitRepository() : boolean {
+        return this.isManagedByDockge && fs.existsSync(path.join(this.path, ".git"));
+    }
+
     get status() : number {
         return this._status;
     }
 
-    validate() {
-        // Check name, allows [a-z][0-9] _ - only
-        if (!this.name.match(/^[a-z0-9_-]+$/)) {
+    static validateName(name : string) {
+        if (!name.match(/^[a-z0-9_-]+$/)) {
             throw new ValidationError("Stack name can only contain [a-z][0-9] _ - only");
         }
+    }
+
+    validate() {
+        Stack.validateName(this.name);
 
         // Check YAML format
         yaml.parse(this.composeYAML);
@@ -373,6 +381,7 @@ export class Stack {
     }
 
     static async getStack(server: DockgeServer, stackName: string, skipFSOperations = false) : Promise<Stack> {
+        Stack.validateName(stackName);
         let dir = path.join(server.stacksDir, stackName);
 
         if (!skipFSOperations) {
@@ -472,6 +481,30 @@ export class Stack {
         if (exitCode !== 0) {
             throw new Error("Failed to restart, please check the terminal output for more information.");
         }
+        return exitCode;
+    }
+
+    async gitPullAndBuild(socket: DockgeSocket) : Promise<number> {
+        if (!this.isGitRepository) {
+            throw new ValidationError("The Stack directory is not a Git repository.");
+        }
+
+        const terminalName = getComposeTerminalName(socket.endpoint, this.name);
+        const scriptPath = path.join(process.cwd(), "extra", "git-pull-build.sh");
+        const composeOptions = this.getComposeOptions("up", "-d", "--build", "--remove-orphans");
+        const exitCode = await Terminal.exec(
+            this.server,
+            socket,
+            terminalName,
+            "sh",
+            [ scriptPath, ...composeOptions ],
+            this.path
+        );
+
+        if (exitCode !== 0) {
+            throw new Error("Git pull or local build failed. Check the progress terminal for details.");
+        }
+
         return exitCode;
     }
 

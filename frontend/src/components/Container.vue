@@ -119,6 +119,39 @@
                         {{ $tc("port", 2) }}
                     </label>
                     <ArrayInput name="ports" :display-name="$t('port')" placeholder="HOST:CONTAINER" />
+                    <div class="input-group mt-3">
+                        <input
+                            v-model.number="allocationTargetPort"
+                            type="number"
+                            min="1"
+                            max="65535"
+                            class="form-control"
+                            :placeholder="$t('containerTargetPort')"
+                            @keyup.enter="allocatePublishedPort"
+                        />
+                        <select v-model="allocationProtocol" class="form-select protocol-select" :aria-label="$t('publishedPortProtocol')">
+                            <option value="tcp">TCP</option>
+                            <option value="udp">UDP</option>
+                        </select>
+                        <button
+                            class="btn btn-normal"
+                            :disabled="allocatingPort || !allocationTargetPort || !stackDefaults.publishedHostIPValue"
+                            @click="allocatePublishedPort"
+                        >
+                            <span v-if="allocatingPort" class="spinner-border spinner-border-sm me-1"></span>
+                            {{ $t("allocateTailnetPort") }}
+                        </button>
+                    </div>
+                    <div v-if="stackDefaults.publishedHostIPValue" class="form-text">
+                        {{ $t("allocateTailnetPortHelp", [
+                            stackDefaults.publishedHostIPVariable,
+                            stackDefaults.publishedPortStart,
+                            stackDefaults.publishedPortEnd,
+                        ]) }}
+                    </div>
+                    <div v-else class="form-text text-warning">
+                        {{ $t("publishedHostIPMissing", [ stackDefaults.publishedHostIPVariable ]) }}
+                    </div>
                 </div>
 
                 <!-- Volumes -->
@@ -231,6 +264,9 @@ export default defineComponent({
         return {
             showConfig: false,
             expandedStats: false,
+            allocationTargetPort: "",
+            allocationProtocol: "tcp",
+            allocatingPort: false,
         };
     },
     computed: {
@@ -286,6 +322,10 @@ export default defineComponent({
 
         stackName() {
             return this.$parent.$parent.stack.name;
+        },
+
+        stackDefaults() {
+            return this.$parent.$parent.stackDefaults;
         },
 
         service() {
@@ -377,6 +417,61 @@ export default defineComponent({
         },
         restartService() {
             this.$emit("restart-service", this.name);
+        },
+        collectCurrentEditorPorts() {
+            const ports = [];
+            for (const config of [ this.jsonObject, this.envsubstJSONConfig ]) {
+                for (const service of Object.values(config.services ?? {})) {
+                    if (service && typeof service === "object" && Array.isArray(service.ports)) {
+                        ports.push(...service.ports);
+                    }
+                }
+            }
+            return ports;
+        },
+        allocatePublishedPort() {
+            const targetPort = Number(this.allocationTargetPort);
+            if (!Number.isInteger(targetPort) || targetPort < 1 || targetPort > 65535) {
+                this.$root.toastError(this.$t("invalidContainerTargetPort"));
+                return;
+            }
+            if (this.service.ports !== undefined && !Array.isArray(this.service.ports)) {
+                this.$root.toastError(this.$t("publishedPortListInvalid"));
+                return;
+            }
+
+            this.allocatingPort = true;
+            this.$root.emitAgent(
+                this.endpoint,
+                "allocatePublishedPort",
+                targetPort,
+                this.allocationProtocol,
+                this.collectCurrentEditorPorts(),
+                (res) => {
+                    this.allocatingPort = false;
+                    if (!res?.ok || !res.allocation) {
+                        if (res) {
+                            this.$root.toastRes(res);
+                        }
+                        return;
+                    }
+
+                    if (this.service.ports === undefined) {
+                        this.service.ports = [];
+                    }
+                    if (!Array.isArray(this.service.ports)) {
+                        this.$root.toastError(this.$t("publishedPortListInvalid"));
+                        return;
+                    }
+
+                    this.service.ports.push(res.allocation.mapping);
+                    this.allocationTargetPort = "";
+                    this.$root.toastSuccess(this.$t("publishedPortAllocated", [
+                        res.allocation.publishedPort,
+                        res.allocation.targetPort,
+                    ]));
+                }
+            );
         }
 
     }
@@ -407,6 +502,10 @@ export default defineComponent({
     .stats {
         font-size: 0.8rem;
         color: #6c757d;
+    }
+
+    .protocol-select {
+        max-width: 95px;
     }
 }
 </style>

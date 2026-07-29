@@ -41,6 +41,11 @@
                         {{ $t("updateStack") }}
                     </button>
 
+                    <button v-if="!isEditMode && stack.isGitRepository" class="btn btn-normal" :disabled="processing" @click="gitPullAndBuildStack">
+                        <font-awesome-icon icon="wrench" class="me-1" />
+                        {{ $t("gitPullAndBuildStack") }}
+                    </button>
+
                     <button v-if="!isEditMode && active" class="btn btn-normal" :disabled="processing" @click="stopStack">
                         <font-awesome-icon icon="stop" class="me-1" />
                         {{ $t("stopStack") }}
@@ -267,6 +272,7 @@ import { BModal } from "bootstrap-vue-next";
 import NetworkInput from "../components/NetworkInput.vue";
 import dotenv from "dotenv";
 import { ref } from "vue";
+import { resolveRequiredEnvironmentVariable } from "../../../common/published-port";
 
 const template = `
 services:
@@ -275,6 +281,14 @@ services:
     restart: unless-stopped
     ports:
       - "8080:80"
+`;
+const homelabTemplate = `
+services:
+  nginx:
+    image: nginx:latest
+    restart: unless-stopped
+    expose:
+      - "80"
 `;
 const envDefault = "# VARIABLE=value #comment";
 
@@ -335,6 +349,13 @@ export default {
             combinedTerminalCols: COMBINED_TERMINAL_COLS,
             stack: {
 
+            },
+            stackDefaults: {
+                defaultExternalNetwork: "",
+                publishedHostIPVariable: "TS_HOST_IP",
+                publishedHostIPValue: "",
+                publishedPortStart: 20000,
+                publishedPortEnd: 39999,
             },
             serviceStatusList: {},
             dockerStats: {},
@@ -472,7 +493,9 @@ export default {
 
         }
     },
-    mounted() {
+    async mounted() {
+        this.stackDefaults = await this.getStackDefaults();
+
         if (this.isAdd) {
             this.processing = false;
             this.isEditMode = true;
@@ -484,7 +507,7 @@ export default {
                 composeYAML = this.$root.composeTemplate;
                 this.$root.composeTemplate = "";
             } else {
-                composeYAML = template;
+                composeYAML = this.stackDefaults.defaultExternalNetwork ? homelabTemplate : template;
             }
             if (this.$root.envTemplate) {
                 composeENV = this.$root.envTemplate;
@@ -503,6 +526,7 @@ export default {
             };
 
             this.yamlCodeChange();
+            this.applyDefaultExternalNetwork();
 
         } else {
             this.stack.name = this.$route.params.stackName;
@@ -516,6 +540,64 @@ export default {
 
     },
     methods: {
+        getStackDefaults() {
+            return new Promise((resolve) => {
+                this.$root.emitAgent(this.endpoint, "getStackDefaults", (res) => {
+                    if (res?.ok && res.defaults) {
+                        resolve(res.defaults);
+                    } else {
+                        if (res) {
+                            this.$root.toastRes(res);
+                        }
+                        resolve({
+                            defaultExternalNetwork: "",
+                            publishedHostIPVariable: "TS_HOST_IP",
+                            publishedHostIPValue: "",
+                            publishedPortStart: 20000,
+                            publishedPortEnd: 39999,
+                        });
+                    }
+                });
+            });
+        },
+
+        ensureDefaultExternalNetworkForService(service) {
+            const networkName = this.stackDefaults.defaultExternalNetwork;
+            if (!networkName || service.network_mode) {
+                return;
+            }
+
+            if (!this.jsonConfig.networks || Array.isArray(this.jsonConfig.networks)) {
+                this.jsonConfig.networks = {};
+            }
+            if (!Object.hasOwn(this.jsonConfig.networks, networkName)) {
+                this.jsonConfig.networks[networkName] = {
+                    external: true,
+                };
+            }
+
+            if (!service.networks) {
+                service.networks = [ networkName ];
+            } else if (Array.isArray(service.networks)) {
+                if (!service.networks.includes(networkName)) {
+                    service.networks.push(networkName);
+                }
+            } else if (typeof service.networks === "object" && !Object.hasOwn(service.networks, networkName)) {
+                service.networks[networkName] = {};
+            }
+        },
+
+        applyDefaultExternalNetwork() {
+            if (!this.jsonConfig.services || typeof this.jsonConfig.services !== "object") {
+                return;
+            }
+            for (const service of Object.values(this.jsonConfig.services)) {
+                if (service && typeof service === "object") {
+                    this.ensureDefaultExternalNetworkForService(service);
+                }
+            }
+        },
+
         startServiceStatusTimeout() {
             clearTimeout(serviceStatusTimeout);
             serviceStatusTimeout = setTimeout(async () => {
@@ -703,6 +785,15 @@ export default {
             });
         },
 
+        gitPullAndBuildStack() {
+            this.processing = true;
+
+            this.$root.emitAgent(this.endpoint, "gitPullAndBuildStack", this.stack.name, (res) => {
+                this.processing = false;
+                this.$root.toastRes(res);
+            });
+        },
+
         deleteDialog() {
             this.$root.emitAgent(this.endpoint, "deleteStack", this.stack.name, (res) => {
                 this.$root.toastRes(res);
@@ -748,8 +839,21 @@ export default {
                 this.yamlDoc = doc;
                 this.jsonConfig = config;
 
-                let env = dotenv.parse(this.stack.composeENV);
-                let envYAML = envsubstYAML(this.stack.composeYAML, env);
+                const env = {};
+                if (this.stackDefaults.publishedHostIPValue) {
+                    env[this.stackDefaults.publishedHostIPVariable] = this.stackDefaults.publishedHostIPValue;
+                }
+                Object.assign(env, dotenv.parse(this.stack.composeENV));
+                const hostIPVariable = this.stackDefaults.publishedHostIPVariable;
+                let composeYAMLForPreview = this.stack.composeYAML;
+                if (env[hostIPVariable]) {
+                    composeYAMLForPreview = resolveRequiredEnvironmentVariable(
+                        composeYAMLForPreview,
+                        hostIPVariable,
+                        env[hostIPVariable]
+                    );
+                }
+                let envYAML = envsubstYAML(composeYAMLForPreview, env);
                 this.envsubstJSONConfig = this.yamlToJSON(envYAML).config;
 
                 clearTimeout(yamlErrorTimeout);
@@ -789,9 +893,11 @@ export default {
                 return;
             }
 
-            this.jsonConfig.services[this.newContainerName] = {
+            const newService = {
                 restart: "unless-stopped",
             };
+            this.ensureDefaultExternalNetworkForService(newService);
+            this.jsonConfig.services[this.newContainerName] = newService;
             this.newContainerName = "";
             let element = this.$refs.containerList.lastElementChild;
             element.scrollIntoView({

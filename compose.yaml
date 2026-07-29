@@ -1,16 +1,23 @@
 services:
   dockge:
-    image: louislam/dockge:1
+    image: linbmv/dockge:local
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+      target: release
     restart: unless-stopped
     ports:
       # Host Port : Container Port
-      - 5001:5001
+      - "${TS_HOST_IP:?Set TS_HOST_IP in /opt/stacks/global.env}:5001:5001"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - ./data:/app/data
         
       # If you want to use private registries, you need to share the auth file with Dockge:
       # - /root/.docker/:/root/.docker
+
+      # For private Git repositories, mount a read-only SSH deploy-key directory:
+      # - /opt/dockge/ssh:/root/.ssh:ro
 
       # Stacks Directory
       # ⚠️ READ IT CAREFULLY. If you did it wrong, your data could end up writing into a WRONG PATH.
@@ -20,3 +27,8 @@ services:
     environment:
       # Tell Dockge where is your stacks directory
       - DOCKGE_STACKS_DIR=/opt/stacks
+      # Optional homelab defaults. D_Home must already exist on the Docker host.
+      - DOCKGE_DEFAULT_EXTERNAL_NETWORK=D_Home
+      - DOCKGE_PUBLISHED_HOST_IP_VARIABLE=TS_HOST_IP
+      - DOCKGE_PUBLISHED_PORT_START=20000
+      - DOCKGE_PUBLISHED_PORT_END=39999

@@ -37,6 +37,10 @@ export interface Arguments {
 export interface Config extends Arguments {
     dataDir : string;
     stacksDir : string;
+    defaultExternalNetwork : string;
+    publishedHostIPVariable : string;
+    publishedPortStart : number;
+    publishedPortEnd : number;
 }
 
 export function checkLogin(socket : DockgeSocket) {
