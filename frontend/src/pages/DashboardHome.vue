@@ -325,31 +325,234 @@ export default {
 
 <style lang="scss" scoped>
 @import "../styles/vars";
+@import "../styles/design-tokens.scss";
 
+// ============================================
+// Modern Dashboard Home Styles
+// ============================================
+
+h1 {
+    font-family: var(--font-display);
+    font-size: var(--text-3xl);
+    font-weight: 600;
+    letter-spacing: var(--tracking-tight);
+    margin-bottom: var(--space-6);
+    background: linear-gradient(135deg, $accent-primary 0%, $accent-support 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+}
+
+h2 {
+    font-family: var(--font-display);
+    font-size: var(--text-2xl);
+    font-weight: 600;
+    color: $text-primary;
+    margin-bottom: var(--space-4);
+    letter-spacing: var(--tracking-tight);
+}
+
+h3 {
+    font-family: var(--font-display);
+    font-size: var(--text-sm);
+    font-weight: 600;
+    color: $text-tertiary;
+    text-transform: uppercase;
+    letter-spacing: var(--tracking-wide);
+    margin-bottom: var(--space-2);
+}
+
+h4 {
+    font-family: var(--font-display);
+    font-size: var(--text-lg);
+    font-weight: 600;
+    color: $text-primary;
+    margin-bottom: var(--space-4);
+}
+
+// Stats numbers with modern styling
 .num {
-    font-size: 30px;
-
-    font-weight: bold;
+    font-family: var(--font-display);
+    font-size: var(--text-4xl);
+    font-weight: 700;
     display: block;
+    margin-top: var(--space-2);
+    letter-spacing: var(--tracking-tighter);
 
     &.active {
-        color: $primary;
+        color: $accent-success;
+        text-shadow: 0 0 20px rgba(16, 185, 129, 0.3);
     }
 
     &.exited {
-        color: $danger;
+        color: $accent-danger;
+        text-shadow: 0 0 20px rgba(239, 68, 68, 0.3);
+    }
+
+    &.inactive {
+        color: $text-tertiary;
     }
 }
 
+// Enhanced shadow-box
 .shadow-box {
-    padding: 20px;
+    background: $surface-raised;
+    border: 1px solid $border-subtle;
+    border-radius: var(--radius-xl);
+    padding: var(--space-8);
+    box-shadow: var(--shadow-base);
+    transition: all var(--transition-base);
+
+    &:hover {
+        border-color: $border-default;
+        box-shadow: var(--shadow-md);
+    }
+
+    &.big-padding {
+        padding: var(--space-10);
+    }
 }
 
+// Stats row styling
+.first-row {
+    .shadow-box {
+        .row {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: var(--space-6);
+
+            .col {
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                padding: var(--space-4);
+                border-radius: var(--radius-lg);
+                transition: all var(--transition-fast);
+
+                &:hover {
+                    background: $surface-elevated;
+                    transform: translateY(-2px);
+                }
+            }
+        }
+    }
+}
+
+// Docker run textarea
+.docker-run {
+    border: 1px solid $border-default;
+    border-radius: var(--radius-xl);
+    font-family: var(--font-mono);
+    font-size: var(--text-sm);
+    background: $surface-deep;
+    color: $text-primary;
+    padding: var(--space-6);
+    min-height: 150px;
+    transition: all var(--transition-base);
+    box-shadow: var(--shadow-base);
+
+    &::placeholder {
+        color: $text-muted;
+    }
+
+    &:focus {
+        border-color: $accent-primary;
+        box-shadow: var(--glow-cyan);
+        background: $surface-base;
+        outline: none;
+    }
+
+    &:hover {
+        border-color: $border-strong;
+    }
+}
+
+// Agent list styling
+.agent {
+    display: flex;
+    align-items: center;
+    padding: var(--space-3);
+    border-radius: var(--radius-lg);
+    transition: all var(--transition-fast);
+
+    &:hover {
+        background: $surface-elevated;
+    }
+
+    .badge {
+        border-radius: var(--radius-pill);
+        padding: var(--space-1) var(--space-3);
+        font-size: var(--text-xs);
+        font-weight: 500;
+
+        &.bg-primary {
+            background: rgba(56, 189, 248, 0.2) !important;
+            color: $accent-primary;
+        }
+
+        &.bg-danger {
+            background: rgba(239, 68, 68, 0.2) !important;
+            color: $accent-danger;
+        }
+
+        &.bg-warning {
+            background: rgba(245, 158, 11, 0.2) !important;
+            color: $accent-warning;
+        }
+
+        &.bg-secondary {
+            background: $surface-elevated !important;
+            color: $text-secondary;
+        }
+    }
+
+    svg {
+        cursor: pointer;
+        color: $text-tertiary;
+        transition: color var(--transition-fast);
+        margin-left: auto;
+
+        &:hover {
+            color: $accent-primary;
+        }
+    }
+}
+
+.remove-agent {
+    cursor: pointer;
+    color: $text-muted;
+    transition: color var(--transition-fast);
+
+    &:hover {
+        color: $accent-danger;
+    }
+}
+
+// Table styling
 table {
-    font-size: 14px;
+    font-size: var(--text-sm);
+    width: 100%;
 
     tr {
-        transition: all ease-in-out 0.2ms;
+        transition: all var(--transition-fast);
+
+        &:hover {
+            background: $surface-elevated;
+        }
+    }
+
+    th {
+        font-weight: 600;
+        color: $text-secondary;
+        text-transform: uppercase;
+        font-size: var(--text-xs);
+        letter-spacing: var(--tracking-wide);
+        padding: var(--space-3);
+    }
+
+    td {
+        padding: var(--space-3);
+        color: $text-primary;
     }
 
     @media (max-width: 550px) {
@@ -358,19 +561,42 @@ table {
     }
 }
 
-.docker-run {
+// Button styling
+.btn {
+    border-radius: var(--radius-pill);
+    font-weight: 500;
+    padding: var(--space-3) var(--space-6);
+    transition: all var(--transition-fast);
     border: none;
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 15px;
+
+    &.btn-normal {
+        background: $surface-elevated;
+        color: $text-primary;
+        border: 1px solid $border-default;
+
+        &:hover {
+            background: $accent-primary;
+            color: $surface-deepest;
+            border-color: $accent-primary;
+            box-shadow: var(--glow-cyan);
+            transform: translateY(-1px);
+        }
+    }
 }
 
-.first-row .shadow-box {
+// Responsive adjustments
+@media (max-width: 768px) {
+    .first-row .shadow-box .row {
+        grid-template-columns: repeat(1, 1fr);
+    }
 
-}
+    h1 {
+        font-size: var(--text-2xl);
+    }
 
-.remove-agent {
-    cursor: pointer;
-    color: rgba(255, 255, 255, 0.3);
+    .num {
+        font-size: var(--text-3xl);
+    }
 }
 
 .agent {

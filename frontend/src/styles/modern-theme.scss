@@ -1,0 +1,446 @@
+// Modern Theme - Core Styles
+@import "design-tokens.scss";
+
+// ============================================
+// Global Reset & Base Styles
+// ============================================
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+html {
+    font-size: 16px;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+    font-family: var(--font-body);
+    font-size: var(--text-base);
+    line-height: var(--leading-normal);
+    color: $text-primary;
+    background: $surface-deepest;
+    min-height: 100vh;
+}
+
+#app {
+    font-family: var(--font-body);
+    background: linear-gradient(135deg, $surface-deepest 0%, $surface-deep 50%, #0A1018 100%);
+    min-height: 100vh;
+}
+
+// ============================================
+// Typography
+// ============================================
+
+h1, h2, h3, h4, h5, h6 {
+    font-family: var(--font-display);
+    font-weight: 600;
+    line-height: var(--leading-tight);
+    letter-spacing: var(--tracking-tight);
+    color: $text-primary;
+    margin-bottom: var(--space-4);
+}
+
+h1 { font-size: var(--text-4xl); }
+h2 { font-size: var(--text-3xl); }
+h3 { font-size: var(--text-2xl); }
+h4 { font-size: var(--text-xl); }
+h5 { font-size: var(--text-lg); }
+h6 { font-size: var(--text-base); }
+
+p {
+    margin-bottom: var(--space-4);
+    color: $text-secondary;
+}
+
+a {
+    color: $accent-primary;
+    text-decoration: none;
+    transition: color var(--transition-fast);
+
+    &:hover {
+        color: $accent-primary-hover;
+    }
+}
+
+code, pre {
+    font-family: var(--font-mono);
+    font-size: var(--text-sm);
+}
+
+// ============================================
+// Card System - Grid-first layout
+// ============================================
+
+.card-modern {
+    background: $surface-raised;
+    border: 1px solid $border-subtle;
+    border-radius: var(--radius-xl);
+    padding: var(--space-6);
+    box-shadow: var(--shadow-base);
+    transition: all var(--transition-base);
+
+    &:hover {
+        border-color: $border-default;
+        box-shadow: var(--shadow-md);
+        transform: translateY(-2px);
+    }
+
+    &-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: var(--space-6);
+        padding-bottom: var(--space-4);
+        border-bottom: 1px solid $border-subtle;
+
+        h3 {
+            margin: 0;
+            font-size: var(--text-xl);
+            color: $text-primary;
+        }
+    }
+
+    &-body {
+        color: $text-secondary;
+    }
+
+    &-footer {
+        margin-top: var(--space-6);
+        padding-top: var(--space-4);
+        border-top: 1px solid $border-subtle;
+        display: flex;
+        gap: var(--space-3);
+        justify-content: flex-end;
+    }
+}
+
+// ============================================
+// Button System - Pill-shaped with tokens
+// ============================================
+
+.btn-modern {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-2);
+    padding: var(--space-3) var(--space-6);
+    font-family: var(--font-body);
+    font-size: var(--text-sm);
+    font-weight: 500;
+    line-height: 1;
+    border: none;
+    border-radius: var(--radius-pill);
+    cursor: pointer;
+    transition: all var(--transition-fast);
+    white-space: nowrap;
+
+    &:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+    }
+
+    // Primary variant
+    &-primary {
+        background: $accent-primary;
+        color: $surface-deepest;
+        box-shadow: var(--glow-cyan);
+
+        &:hover:not(:disabled) {
+            background: $accent-primary-hover;
+            box-shadow: 0 0 30px rgba(56, 189, 248, 0.5);
+            transform: translateY(-1px);
+        }
+
+        &:active {
+            transform: translateY(0);
+        }
+    }
+
+    // Secondary variant
+    &-secondary {
+        background: $surface-elevated;
+        color: $text-primary;
+        border: 1px solid $border-default;
+
+        &:hover:not(:disabled) {
+            background: $surface-raised;
+            border-color: $border-strong;
+        }
+    }
+
+    // Danger variant
+    &-danger {
+        background: $accent-danger;
+        color: white;
+
+        &:hover:not(:disabled) {
+            background: darken($accent-danger, 5%);
+            box-shadow: 0 0 20px rgba(239, 68, 68, 0.4);
+        }
+    }
+
+    // Success variant
+    &-success {
+        background: $accent-success;
+        color: white;
+
+        &:hover:not(:disabled) {
+            background: darken($accent-success, 5%);
+        }
+    }
+
+    // Ghost variant
+    &-ghost {
+        background: transparent;
+        color: $text-secondary;
+        border: 1px solid transparent;
+
+        &:hover:not(:disabled) {
+            background: $surface-raised;
+            color: $text-primary;
+            border-color: $border-subtle;
+        }
+    }
+
+    // Small size
+    &-sm {
+        padding: var(--space-2) var(--space-4);
+        font-size: var(--text-xs);
+    }
+
+    // Large size
+    &-lg {
+        padding: var(--space-4) var(--space-8);
+        font-size: var(--text-base);
+    }
+}
+
+// ============================================
+// Input System
+// ============================================
+
+.input-modern {
+    width: 100%;
+    padding: var(--space-3) var(--space-4);
+    font-family: var(--font-body);
+    font-size: var(--text-base);
+    color: $text-primary;
+    background: $surface-elevated;
+    border: 1px solid $border-default;
+    border-radius: var(--radius-lg);
+    transition: all var(--transition-fast);
+
+    &::placeholder {
+        color: $text-muted;
+    }
+
+    &:focus {
+        outline: none;
+        border-color: $accent-primary;
+        box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.1);
+    }
+
+    &:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+    }
+}
+
+textarea.input-modern {
+    min-height: 120px;
+    resize: vertical;
+    font-family: var(--font-mono);
+    line-height: var(--leading-relaxed);
+}
+
+// ============================================
+// Badge System
+// ============================================
+
+.badge-modern {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1);
+    padding: var(--space-1) var(--space-3);
+    font-size: var(--text-xs);
+    font-weight: 500;
+    border-radius: var(--radius-pill);
+    white-space: nowrap;
+
+    &-primary {
+        background: rgba(56, 189, 248, 0.15);
+        color: $accent-primary;
+    }
+
+    &-success {
+        background: rgba(16, 185, 129, 0.15);
+        color: $accent-success;
+    }
+
+    &-warning {
+        background: rgba(245, 158, 11, 0.15);
+        color: $accent-warning;
+    }
+
+    &-danger {
+        background: rgba(239, 68, 68, 0.15);
+        color: $accent-danger;
+    }
+
+    &-neutral {
+        background: $surface-elevated;
+        color: $text-secondary;
+    }
+}
+
+// ============================================
+// Grid Layout System
+// ============================================
+
+.grid-modern {
+    display: grid;
+    gap: var(--space-6);
+
+    &-cols-1 { grid-template-columns: repeat(1, 1fr); }
+    &-cols-2 { grid-template-columns: repeat(2, 1fr); }
+    &-cols-3 { grid-template-columns: repeat(3, 1fr); }
+    &-cols-4 { grid-template-columns: repeat(4, 1fr); }
+
+    @media (max-width: 768px) {
+        &-cols-2,
+        &-cols-3,
+        &-cols-4 {
+            grid-template-columns: repeat(1, 1fr);
+        }
+    }
+
+    @media (min-width: 769px) and (max-width: 1024px) {
+        &-cols-3,
+        &-cols-4 {
+            grid-template-columns: repeat(2, 1fr);
+        }
+    }
+}
+
+// ============================================
+// Scrollbar Styling
+// ============================================
+
+::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+}
+
+::-webkit-scrollbar-track {
+    background: $surface-deep;
+}
+
+::-webkit-scrollbar-thumb {
+    background: $surface-raised;
+    border-radius: var(--radius-pill);
+    border: 2px solid $surface-deep;
+
+    &:hover {
+        background: $surface-elevated;
+    }
+}
+
+// ============================================
+// Modal System
+// ============================================
+
+.modal-modern {
+    .modal-content {
+        background: $surface-raised;
+        border: 1px solid $border-default;
+        border-radius: var(--radius-2xl);
+        box-shadow: var(--shadow-xl);
+        backdrop-filter: blur(20px);
+    }
+
+    .modal-header {
+        border-bottom: 1px solid $border-subtle;
+        padding: var(--space-6);
+
+        .modal-title {
+            font-size: var(--text-2xl);
+            font-weight: 600;
+            color: $text-primary;
+        }
+    }
+
+    .modal-body {
+        padding: var(--space-6);
+        color: $text-secondary;
+    }
+
+    .modal-footer {
+        border-top: 1px solid $border-subtle;
+        padding: var(--space-6);
+        display: flex;
+        gap: var(--space-3);
+        justify-content: flex-end;
+    }
+
+    .modal-backdrop {
+        backdrop-filter: blur(8px);
+        background: rgba(5, 7, 12, 0.75);
+    }
+}
+
+// ============================================
+// List Group
+// ============================================
+
+.list-group-modern {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+
+    .list-group-item {
+        background: $surface-raised;
+        border: 1px solid $border-subtle;
+        border-radius: var(--radius-lg);
+        padding: var(--space-4) var(--space-5);
+        color: $text-secondary;
+        transition: all var(--transition-fast);
+
+        &:hover {
+            background: $surface-elevated;
+            border-color: $border-default;
+            transform: translateX(4px);
+        }
+
+        &.active {
+            background: rgba(56, 189, 248, 0.15);
+            border-color: $accent-primary;
+            color: $accent-primary;
+        }
+    }
+}
+
+// ============================================
+// Utility Classes
+// ============================================
+
+.text-gradient {
+    background: linear-gradient(135deg, $accent-primary 0%, $accent-support 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+}
+
+.glow-effect {
+    box-shadow: var(--glow-cyan);
+}
+
+.surface-glass {
+    background: rgba(22, 29, 38, 0.6);
+    backdrop-filter: blur(20px);
+    border: 1px solid $border-subtle;
+}

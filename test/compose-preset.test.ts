@@ -104,6 +104,23 @@ services:
     ]);
 });
 
+test("recognizes variable ports with default values as rewritable", () => {
+    const config = parse(`
+services:
+  web:
+    ports:
+      - "\${READER_PORT:-18080}:80"
+`);
+    const plan = planPortPreset(config, HOST_IP_VARIABLE);
+
+    assert.equal(plan.skipped.length, 0);
+    assert.equal(plan.rewritable.length, 1);
+    assert.equal(plan.rewritable[0].serviceName, "web");
+    assert.equal(plan.rewritable[0].target, "80");
+    assert.equal(plan.rewritable[0].publishedPort, 18080);
+    assert.equal(plan.rewritable[0].protocol, "tcp");
+});
+
 test("pins a lone container port, which Docker would otherwise publish randomly", () => {
     // "80" alone means "publish 80 on a random host port, on every interface".
     // That is the exposure the preset exists to remove, so it is rewritten.

@@ -1,9 +1,11 @@
 @import "vars.scss";
+@import "design-tokens.scss";
+@import "modern-theme.scss";
 @import "bootstrap/scss/bootstrap";
 @import "bootstrap-vue-next/dist/bootstrap-vue-next.css";
 
 #app {
-    font-family: BlinkMacSystemFont, segoe ui, Roboto, helvetica neue, Arial, noto sans, sans-serif, apple color emoji, segoe ui emoji, segoe ui symbol, noto color emoji;
+    font-family: var(--font-body);
 }
 
 h1 {

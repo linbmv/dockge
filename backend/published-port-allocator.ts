@@ -20,6 +20,7 @@ async function collectDockerBindings() : Promise<Set<string>> {
     const result = new Set<string>();
     const list = await childProcessAsync.spawn("docker", [ "container", "ls", "--all", "--quiet" ], {
         encoding: "utf-8",
+        maxBuffer: 10 * 1024 * 1024, // 10MB
     });
     const ids = (list.stdout?.toString() || "").split("\n").map(value => value.trim()).filter(Boolean);
     if (ids.length === 0) {
@@ -28,6 +29,7 @@ async function collectDockerBindings() : Promise<Set<string>> {
 
     const inspected = await childProcessAsync.spawn("docker", [ "container", "inspect", ...ids ], {
         encoding: "utf-8",
+        maxBuffer: 10 * 1024 * 1024, // 10MB
     });
     const containers = JSON.parse(inspected.stdout?.toString() || "[]") as Array<Record<string, unknown>>;
     for (const container of containers) {

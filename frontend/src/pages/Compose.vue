@@ -109,87 +109,6 @@
                                 </select>
                             </div>
                         </div>
-
-                        <!-- Paste an existing compose.yaml / .env -->
-                        <h4 class="mb-3">{{ $t("pasteCompose") }}</h4>
-                        <div class="shadow-box big-padding mb-3">
-                            <div class="form-text mb-2">{{ $t("pasteComposeHelp") }}</div>
-                            <textarea
-                                v-model="pastedCompose"
-                                class="form-control paste-area"
-                                rows="8"
-                                spellcheck="false"
-                                :placeholder="$t('pasteComposePlaceholder')"
-                            ></textarea>
-
-                            <label class="form-label mt-3">{{ $t("pasteEnvOptional") }}</label>
-                            <textarea
-                                v-model="pastedEnv"
-                                class="form-control paste-area"
-                                rows="4"
-                                spellcheck="false"
-                                placeholder="KEY=value"
-                            ></textarea>
-
-                            <div class="mt-3">
-                                <button class="btn btn-primary me-2" :disabled="!pastedCompose.trim()" @click="applyPastedCompose">
-                                    <font-awesome-icon icon="save" class="me-1" />
-                                    {{ $t("usePastedCompose") }}
-                                </button>
-                                <button v-if="pastedCompose || pastedEnv" class="btn btn-normal" @click="pastedCompose = ''; pastedEnv = ''; pasteError = '';">
-                                    {{ $t("clear") }}
-                                </button>
-                            </div>
-                            <div v-if="pasteError" class="text-danger mt-2">{{ pasteError }}</div>
-                        </div>
-
-                        <!-- Network / port presets -->
-                        <h4 class="mb-3">{{ $t("networkAndPortPresets") }}</h4>
-                        <div class="shadow-box big-padding mb-3">
-                            <div class="form-text mb-3">{{ $t("networkAndPortPresetsHelp") }}</div>
-
-                            <div v-if="stackDefaults.defaultExternalNetwork" class="mb-3">
-                                <button
-                                    class="btn btn-normal me-2"
-                                    :disabled="pendingNetworkServices.length === 0"
-                                    @click="applyNetworkPreset"
-                                >
-                                    {{ $t("joinSharedNetwork", [ stackDefaults.defaultExternalNetwork ]) }}
-                                </button>
-                                <span v-if="pendingNetworkServices.length > 0" class="form-text">
-                                    {{ $t("joinSharedNetworkPending", [ pendingNetworkServices.join(", ") ]) }}
-                                </span>
-                                <span v-else class="form-text">{{ $t("joinSharedNetworkDone") }}</span>
-                            </div>
-
-                            <div>
-                                <button
-                                    class="btn btn-normal me-2"
-                                    :disabled="allocatingPorts || portPreset.rewritable.length === 0 || !stackDefaults.publishedHostIPValue"
-                                    @click="applyPortPreset"
-                                >
-                                    <span v-if="allocatingPorts" class="spinner-border spinner-border-sm me-1"></span>
-                                    {{ $t("pinPortsToTailnet") }}
-                                </button>
-
-                                <div v-if="!stackDefaults.publishedHostIPValue" class="form-text text-warning mt-2">
-                                    {{ $t("publishedHostIPMissing", [ stackDefaults.publishedHostIPVariable ]) }}
-                                </div>
-                                <ul v-else-if="portPreset.rewritable.length > 0" class="preset-list mt-2">
-                                    <li v-for="entry in portPreset.rewritable" :key="entry.serviceName + ':' + entry.index">
-                                        <code>{{ entry.serviceName }}</code> — {{ entry.original }}
-                                    </li>
-                                </ul>
-                                <div v-else class="form-text mt-2">{{ $t("pinPortsToTailnetDone") }}</div>
-
-                                <ul v-if="portPreset.skipped.length > 0" class="preset-list mt-2 text-warning">
-                                    <li v-for="entry in portPreset.skipped" :key="'skip-' + entry.serviceName + ':' + entry.index">
-                                        <code>{{ entry.serviceName }}</code> — {{ entry.original }}
-                                        <span class="ms-1">({{ $t("portPresetSkip_" + entry.skipReason) }})</span>
-                                    </li>
-                                </ul>
-                            </div>
-                        </div>
                     </div>
 
                     <!-- Containers -->
@@ -294,6 +213,56 @@
                                 :hasFocus="editorFocus"
                                 @change="yamlCodeChange"
                             />
+                        </div>
+                    </div>
+
+                    <!-- Network / port presets (shown only in add mode) -->
+                    <div v-if="isAdd">
+                        <h4 class="mb-3">{{ $t("networkAndPortPresets") }}</h4>
+                        <div class="shadow-box big-padding mb-3">
+                            <div class="form-text mb-3">{{ $t("networkAndPortPresetsHelp") }}</div>
+
+                            <div v-if="stackDefaults.defaultExternalNetwork" class="mb-3">
+                                <button
+                                    class="btn btn-normal me-2"
+                                    :disabled="pendingNetworkServices.length === 0"
+                                    @click="applyNetworkPreset"
+                                >
+                                    {{ $t("joinSharedNetwork", [ stackDefaults.defaultExternalNetwork ]) }}
+                                </button>
+                                <span v-if="pendingNetworkServices.length > 0" class="form-text">
+                                    {{ $t("joinSharedNetworkPending", [ pendingNetworkServices.join(", ") ]) }}
+                                </span>
+                                <span v-else class="form-text">{{ $t("joinSharedNetworkDone") }}</span>
+                            </div>
+
+                            <div>
+                                <button
+                                    class="btn btn-normal me-2"
+                                    :disabled="allocatingPorts || portPreset.rewritable.length === 0 || !stackDefaults.publishedHostIPValue"
+                                    @click="applyPortPreset"
+                                >
+                                    <span v-if="allocatingPorts" class="spinner-border spinner-border-sm me-1"></span>
+                                    {{ $t("pinPortsToTailnet") }}
+                                </button>
+
+                                <div v-if="!stackDefaults.publishedHostIPValue" class="form-text text-warning mt-2">
+                                    {{ $t("publishedHostIPMissing", [ stackDefaults.publishedHostIPVariable ]) }}
+                                </div>
+                                <ul v-else-if="portPreset.rewritable.length > 0" class="preset-list mt-2">
+                                    <li v-for="entry in portPreset.rewritable" :key="entry.serviceName + ':' + entry.index">
+                                        <code>{{ entry.serviceName }}</code> — {{ entry.original }}
+                                    </li>
+                                </ul>
+                                <div v-else class="form-text mt-2">{{ $t("pinPortsToTailnetDone") }}</div>
+
+                                <ul v-if="portPreset.skipped.length > 0" class="preset-list mt-2 text-warning">
+                                    <li v-for="entry in portPreset.skipped" :key="'skip-' + entry.serviceName + ':' + entry.index">
+                                        <code>{{ entry.serviceName }}</code> — {{ entry.original }}
+                                        <span class="ms-1">({{ $t("portPresetSkip_" + entry.skipReason) }})</span>
+                                    </li>
+                                </ul>
+                            </div>
                         </div>
                     </div>
 
@@ -456,9 +425,6 @@ export default {
             newContainerName: "",
             stopServiceStatusTimeout: false,
             stopDockerStatsTimeout: false,
-            pastedCompose: "",
-            pastedEnv: "",
-            pasteError: "",
             allocatingPorts: false,
         };
     },
@@ -704,28 +670,6 @@ export default {
             } else if (typeof service.networks === "object" && !Object.hasOwn(service.networks, networkName)) {
                 service.networks[networkName] = {};
             }
-        },
-
-        applyPastedCompose() {
-            this.pasteError = "";
-            const trimmed = this.pastedCompose.trim();
-            if (!trimmed) {
-                return;
-            }
-
-            try {
-                this.yamlToJSON(trimmed);
-            } catch (e) {
-                this.pasteError = e.message || String(e);
-                return;
-            }
-
-            this.stack.composeYAML = trimmed;
-            if (this.pastedEnv.trim()) {
-                this.stack.composeENV = this.pastedEnv.trim();
-            }
-            this.pastedCompose = "";
-            this.pastedEnv = "";
         },
 
         /**
@@ -1173,34 +1117,298 @@ export default {
 
 <style scoped lang="scss">
 @import "../styles/vars.scss";
+@import "../styles/design-tokens.scss";
 
+// ============================================
+// Modern Compose Page Styles
+// ============================================
+
+h1 {
+    font-family: var(--font-display);
+    font-size: var(--text-3xl);
+    font-weight: 600;
+    letter-spacing: var(--tracking-tight);
+    margin-bottom: var(--space-6);
+    background: linear-gradient(135deg, $accent-primary 0%, $accent-support 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+}
+
+h4 {
+    font-family: var(--font-display);
+    font-size: var(--text-lg);
+    font-weight: 600;
+    color: $text-primary;
+    margin-bottom: var(--space-4);
+    letter-spacing: var(--tracking-tight);
+}
+
+// Enhanced shadow-box
+.shadow-box {
+    background: $surface-raised;
+    border: 1px solid $border-subtle;
+    border-radius: var(--radius-xl);
+    padding: var(--space-6);
+    box-shadow: var(--shadow-base);
+    transition: all var(--transition-base);
+
+    &:hover {
+        border-color: $border-default;
+        box-shadow: var(--shadow-md);
+    }
+
+    &.big-padding {
+        padding: var(--space-8);
+    }
+}
+
+// Button enhancements
+.btn {
+    border-radius: var(--radius-pill);
+    font-weight: 500;
+    padding: var(--space-3) var(--space-5);
+    transition: all var(--transition-fast);
+    border: none;
+
+    &.btn-primary {
+        background: $accent-primary;
+        color: $surface-deepest;
+        box-shadow: var(--glow-cyan);
+
+        &:hover:not(:disabled) {
+            background: $accent-primary-hover;
+            box-shadow: 0 0 30px rgba(56, 189, 248, 0.5);
+            transform: translateY(-1px);
+        }
+
+        &:active {
+            transform: translateY(0);
+        }
+    }
+
+    &.btn-secondary {
+        background: $surface-elevated;
+        color: $text-primary;
+        border: 1px solid $border-default;
+
+        &:hover:not(:disabled) {
+            background: $surface-raised;
+            border-color: $border-strong;
+        }
+    }
+
+    &.btn-normal {
+        background: $surface-elevated;
+        color: $text-secondary;
+        border: 1px solid $border-subtle;
+
+        &:hover:not(:disabled) {
+            background: $surface-raised;
+            color: $text-primary;
+            border-color: $border-default;
+        }
+    }
+
+    &.btn-danger {
+        background: $accent-danger;
+        color: white;
+
+        &:hover:not(:disabled) {
+            background: darken($accent-danger, 5%);
+            box-shadow: 0 0 20px rgba(239, 68, 68, 0.4);
+        }
+    }
+
+    &:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+    }
+}
+
+// Form enhancements
+.form-control, .form-select {
+    background: $surface-elevated;
+    border: 1px solid $border-default;
+    border-radius: var(--radius-lg);
+    color: $text-primary;
+    padding: var(--space-3) var(--space-4);
+    transition: all var(--transition-fast);
+    font-size: var(--text-base);
+
+    &::placeholder {
+        color: $text-muted;
+    }
+
+    &:focus {
+        background: $surface-raised;
+        border-color: $accent-primary;
+        box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.1);
+        outline: none;
+    }
+}
+
+.form-label {
+    color: $text-secondary;
+    font-weight: 500;
+    font-size: var(--text-sm);
+    margin-bottom: var(--space-2);
+    letter-spacing: var(--tracking-wide);
+    text-transform: uppercase;
+}
+
+.form-text {
+    color: $text-muted;
+    font-size: var(--text-xs);
+    margin-top: var(--space-2);
+}
+
+// Input group
+.input-group {
+    display: flex;
+    gap: var(--space-2);
+
+    .form-control {
+        flex: 1;
+        border-radius: var(--radius-lg);
+    }
+
+    .btn {
+        border-radius: var(--radius-pill);
+    }
+}
+
+// Terminal styling
 .terminal {
     height: 200px;
+    background: $surface-deep;
+    border: 1px solid $border-subtle;
+    border-radius: var(--radius-xl);
+    padding: var(--space-4);
+    font-family: var(--font-mono);
+    box-shadow: var(--shadow-base);
 }
 
+// Editor box
 .editor-box {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 14px;
+    font-family: var(--font-mono);
+    font-size: var(--text-sm);
+    background: $surface-deep;
+    border: 1px solid $border-subtle;
+    border-radius: var(--radius-xl);
+    overflow: hidden;
+    box-shadow: var(--shadow-base);
+    transition: all var(--transition-base);
+
+    &.edit-mode {
+        border-color: $accent-primary;
+        box-shadow: var(--glow-cyan);
+    }
+
+    &:hover {
+        border-color: $border-default;
+    }
 }
 
+// Paste area
 .paste-area {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 13px;
+    font-family: var(--font-mono);
+    font-size: var(--text-sm);
+    background: $surface-elevated;
+    border: 2px dashed $border-default;
+    border-radius: var(--radius-xl);
+    padding: var(--space-6);
+    min-height: 200px;
+    color: $text-secondary;
+    transition: all var(--transition-base);
+
+    &:focus-within {
+        border-color: $accent-primary;
+        border-style: solid;
+        box-shadow: var(--glow-cyan);
+        background: $surface-raised;
+    }
+
+    &:hover {
+        border-color: $border-strong;
+        background: $surface-raised;
+    }
 }
 
+// Preset list
 .preset-list {
-    font-size: 13px;
+    font-size: var(--text-sm);
     list-style: none;
     margin-bottom: 0;
     padding-left: 0;
 
     li {
-        padding: 2px 0;
+        padding: var(--space-2) 0;
+        color: $text-secondary;
+        transition: color var(--transition-fast);
+
+        &:hover {
+            color: $text-primary;
+        }
     }
 }
 
+// Agent name badge
 .agent-name {
-    font-size: 13px;
-    color: $dark-font-color3;
+    display: inline-flex;
+    align-items: center;
+    padding: var(--space-1) var(--space-3);
+    font-size: var(--text-xs);
+    font-weight: 500;
+    color: $text-muted;
+    background: $surface-elevated;
+    border-radius: var(--radius-pill);
+    margin-left: var(--space-3);
+}
+
+// Button group
+.btn-group {
+    display: flex;
+    gap: var(--space-2);
+    flex-wrap: wrap;
+
+    .btn {
+        border-radius: var(--radius-pill) !important;
+    }
+}
+
+// Container list styling
+div[ref="containerList"] {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+}
+
+// Animations
+@keyframes slideInUp {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.slide-fade-enter-active {
+    animation: slideInUp var(--transition-slow);
+}
+
+// Responsive adjustments
+@media (max-width: 992px) {
+    .btn-group {
+        width: 100%;
+
+        .btn {
+            flex: 1;
+            min-width: auto;
+        }
+    }
 }
 </style>

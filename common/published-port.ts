@@ -274,4 +274,28 @@ export function isPlainPort(value : string | undefined) : boolean {
     return parseSinglePort(value) !== undefined;
 }
 
+/**
+ * Extract the default value from a shell variable expression like `${VAR:-default}`.
+ * Returns the default value if present, otherwise undefined.
+ */
+export function extractVariableDefault(value : string | undefined) : string | undefined {
+    if (!value || typeof value !== "string") {
+        return undefined;
+    }
+    // Match ${VAR:-default} or ${VAR:?error} patterns
+    const match = value.trim().match(/^\$\{[^}]+:-([^}]+)\}$/);
+    return match ? match[1] : undefined;
+}
+
+/**
+ * Check if a port value is a variable expression with a numeric default.
+ * Examples: ${PORT:-8080} → true, ${PORT} → false, 8080 → false
+ */
+export function isPortVariable(value : string | undefined) : boolean {
+    if (!value || typeof value !== "string") {
+        return false;
+    }
+    return /^\$\{[^}]+:-\d+\}$/.test(value.trim());
+}
+
 export { parseSinglePort };
