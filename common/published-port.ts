@@ -13,6 +13,70 @@ function parseProtocol(value : unknown) : PublishedPortProtocol {
     return value === "udp" ? "udp" : "tcp";
 }
 
+/**
+ * Split a Compose short-syntax port mapping on its top-level colons. `${VAR:?msg}`
+ * interpolations and bracketed IPv6 hosts contain colons that are not separators.
+ */
+function splitPortSegments(value : string) : string[] | undefined {
+    const segments : string[] = [];
+    let current = "";
+    let braceDepth = 0;
+    let bracketDepth = 0;
+
+    for (let index = 0; index < value.length; index += 1) {
+        const char = value[index];
+
+        if (char === "$" && value[index + 1] === "{") {
+            braceDepth += 1;
+            current += "${";
+            index += 1;
+            continue;
+        }
+        if (char === "}" && braceDepth > 0) {
+            braceDepth -= 1;
+            current += char;
+            continue;
+        }
+        if (char === "[") {
+            bracketDepth += 1;
+            current += char;
+            continue;
+        }
+        if (char === "]" && bracketDepth > 0) {
+            bracketDepth -= 1;
+            current += char;
+            continue;
+        }
+        if (char === ":" && braceDepth === 0 && bracketDepth === 0) {
+            segments.push(current);
+            current = "";
+            continue;
+        }
+        current += char;
+    }
+
+    if (braceDepth !== 0 || bracketDepth !== 0) {
+        return undefined;
+    }
+    segments.push(current);
+    return segments;
+}
+
+function parseSinglePort(value : unknown) : number | undefined {
+    if (typeof value === "number") {
+        return Number.isInteger(value) && value >= 1 && value <= 65535 ? value : undefined;
+    }
+    if (typeof value !== "string") {
+        return undefined;
+    }
+    const trimmed = value.trim();
+    if (!/^\d+$/.test(trimmed)) {
+        return undefined;
+    }
+    const port = Number(trimmed);
+    return port >= 1 && port <= 65535 ? port : undefined;
+}
+
 function expandPortRange(value : unknown) : number[] {
     if (typeof value === "number") {
         return Number.isInteger(value) && value >= 1 && value <= 65535 ? [ value ] : [];
@@ -39,29 +103,77 @@ function expandPortRange(value : unknown) : number[] {
     return ports;
 }
 
-function parseShortSyntax(value : string) : PublishedPortBinding[] {
-    const protocolSeparator = value.lastIndexOf("/");
-    const protocol = parseProtocol(protocolSeparator >= 0 ? value.slice(protocolSeparator + 1) : "tcp");
-    const mapping = protocolSeparator >= 0 ? value.slice(0, protocolSeparator) : value;
+/**
+ * A Compose short-syntax port mapping broken into its raw parts. Segments keep
+ * their original text so `${VAR}` interpolations survive a round trip.
+ */
+export interface ParsedPortMapping {
+    hostIP ?: string;
+    published ?: string;
+    target : string;
+    protocol : PublishedPortProtocol;
+}
 
-    let publishedPart = "";
-    const arrowIndex = mapping.indexOf("->");
-    if (arrowIndex >= 0) {
-        const hostMapping = mapping.slice(0, arrowIndex);
-        publishedPart = hostMapping.slice(hostMapping.lastIndexOf(":") + 1);
-    } else {
-        const parts = mapping.split(":");
-        if (parts.length < 2) {
-            // A lone port is a container target port with an automatically
-            // assigned runtime port, not a persistent published port.
-            return [];
-        }
-        publishedPart = parts[parts.length - 2];
+export function parseShortPortMapping(value : string) : ParsedPortMapping | undefined {
+    const segments = splitPortSegments(value.trim());
+    if (!segments || segments.length === 0 || segments.length > 3) {
+        return undefined;
     }
 
-    return expandPortRange(publishedPart).map(port => ({
+    // The protocol suffix belongs to the container target, which is always last.
+    let last = segments[segments.length - 1];
+    let protocol : PublishedPortProtocol = "tcp";
+    const protocolSeparator = last.lastIndexOf("/");
+    if (protocolSeparator >= 0) {
+        protocol = parseProtocol(last.slice(protocolSeparator + 1).trim());
+        last = last.slice(0, protocolSeparator);
+    }
+
+    if (segments.length === 1) {
+        return {
+            target: last.trim(),
+            protocol
+        };
+    }
+    if (segments.length === 2) {
+        return {
+            published: segments[0].trim(),
+            target: last.trim(),
+            protocol
+        };
+    }
+    return {
+        hostIP: segments[0].trim(),
+        published: segments[1].trim(),
+        target: last.trim(),
+        protocol,
+    };
+}
+
+function parseShortSyntax(value : string) : PublishedPortBinding[] {
+    // Docker's `docker ps` display form, e.g. `0.0.0.0:21000->80/tcp`.
+    const arrowIndex = value.indexOf("->");
+    if (arrowIndex >= 0) {
+        const protocolSeparator = value.lastIndexOf("/");
+        const protocol = parseProtocol(protocolSeparator > arrowIndex ? value.slice(protocolSeparator + 1) : "tcp");
+        const hostMapping = value.slice(0, arrowIndex);
+        const publishedPart = hostMapping.slice(hostMapping.lastIndexOf(":") + 1);
+        return expandPortRange(publishedPart).map(port => ({
+            port,
+            protocol
+        }));
+    }
+
+    const mapping = parseShortPortMapping(value);
+    // A lone port is a container target port with an automatically assigned
+    // runtime port, not a persistent published port.
+    if (!mapping || mapping.published === undefined) {
+        return [];
+    }
+
+    return expandPortRange(mapping.published).map(port => ({
         port,
-        protocol
+        protocol: mapping.protocol
     }));
 }
 
@@ -127,6 +239,14 @@ export function resolveRequiredEnvironmentVariable(
     return content.replace(pattern, () => value);
 }
 
+/**
+ * The Compose expression used as the host IP of every managed published port.
+ * It fails closed at deploy time when the variable is not set.
+ */
+export function formatPublishedHostIPExpression(hostIPVariable : string) : string {
+    return `\${${hostIPVariable}:?Set ${hostIPVariable} in Dockge global.env}`;
+}
+
 export function formatPublishedPortMapping(
     hostIPVariable : string,
     publishedPort : number,
@@ -134,5 +254,24 @@ export function formatPublishedPortMapping(
     protocol : PublishedPortProtocol
 ) : string {
     const suffix = protocol === "udp" ? "/udp" : "";
-    return `\${${hostIPVariable}:?Set ${hostIPVariable} in Dockge global.env}:${publishedPort}:${targetPort}${suffix}`;
+    return `${formatPublishedHostIPExpression(hostIPVariable)}:${publishedPort}:${targetPort}${suffix}`;
 }
+
+/**
+ * Whether a host IP segment publishes on every interface. Managed rewrites
+ * narrow these to the Tailscale address; a literal address is left untouched
+ * because it is a deliberate choice by whoever wrote the Compose file.
+ */
+export function isWildcardHostIP(value : string | undefined) : boolean {
+    if (value === undefined) {
+        return true;
+    }
+    const trimmed = value.trim();
+    return trimmed === "" || trimmed === "0.0.0.0" || trimmed === "::" || trimmed === "[::]" || trimmed === "*";
+}
+
+export function isPlainPort(value : string | undefined) : boolean {
+    return parseSinglePort(value) !== undefined;
+}
+
+export { parseSinglePort };

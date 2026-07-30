@@ -148,29 +148,12 @@ export interface PublishedPortAllocation {
     mapping : string;
 }
 
-export async function allocatePublishedPort(
-    server : DockgeServer,
-    targetPortValue : unknown,
-    protocolValue : unknown,
-    currentEditorPorts : unknown
-) : Promise<PublishedPortAllocation> {
-    const targetPort = Number(targetPortValue);
-    if (!Number.isInteger(targetPort) || targetPort < 1 || targetPort > 65535) {
-        throw new ValidationError("Target port must be an integer from 1 to 65535.");
-    }
-    if (protocolValue !== "tcp" && protocolValue !== "udp") {
-        throw new ValidationError("Protocol must be tcp or udp.");
-    }
-    if (!Array.isArray(currentEditorPorts)) {
-        throw new ValidationError("Current editor ports must be an array.");
-    }
-    if (!server.getPublishedHostIPValue()) {
-        throw new ValidationError(
-            `${server.config.publishedHostIPVariable} must be set to a valid IPv4 address in Dockge global.env.`
-        );
-    }
-
-    const protocol = protocolValue as PublishedPortProtocol;
+/**
+ * Every host port already taken: by a running container, by a saved Stack, and
+ * by whatever is currently in the editor. Fails closed — a Stack that cannot be
+ * inspected aborts allocation rather than risking a collision.
+ */
+async function collectUsedPorts(server : DockgeServer, currentEditorPorts : unknown) : Promise<Set<string>> {
     const used = await collectDockerBindings();
     for (const key of await collectSavedStackBindings(server)) {
         used.add(key);
@@ -178,8 +161,38 @@ export async function allocatePublishedPort(
     for (const binding of extractPublishedPortBindings(currentEditorPorts)) {
         used.add(publishedPortKey(binding.port, binding.protocol));
     }
+    return used;
+}
 
-    const reserved = activeReservations(server);
+function requireHostIP(server : DockgeServer) : void {
+    if (!server.getPublishedHostIPValue()) {
+        throw new ValidationError(
+            `${server.config.publishedHostIPVariable} must be set to a valid IPv4 address in Dockge global.env.`
+        );
+    }
+}
+
+function parseTargetPort(value : unknown) : number {
+    const targetPort = Number(value);
+    if (!Number.isInteger(targetPort) || targetPort < 1 || targetPort > 65535) {
+        throw new ValidationError("Target port must be an integer from 1 to 65535.");
+    }
+    return targetPort;
+}
+
+function parseProtocolValue(value : unknown) : PublishedPortProtocol {
+    if (value !== "tcp" && value !== "udp") {
+        throw new ValidationError("Protocol must be tcp or udp.");
+    }
+    return value;
+}
+
+function takeNextPort(
+    server : DockgeServer,
+    protocol : PublishedPortProtocol,
+    used : Set<string>,
+    reserved : Map<string, number>
+) : number {
     const publishedPort = findAvailablePublishedPort(
         server.config.publishedPortStart,
         server.config.publishedPortEnd,
@@ -187,22 +200,109 @@ export async function allocatePublishedPort(
         used,
         reserved
     );
-    if (publishedPort !== undefined) {
-        reserved.set(publishedPortKey(publishedPort, protocol), Date.now());
-        return {
-            publishedPort,
-            targetPort,
-            protocol,
-            mapping: formatPublishedPortMapping(
-                server.config.publishedHostIPVariable,
-                publishedPort,
-                targetPort,
-                protocol
-            ),
-        };
+    if (publishedPort === undefined) {
+        throw new ValidationError(
+            `No available ${protocol.toUpperCase()} port in ${server.config.publishedPortStart}-${server.config.publishedPortEnd}.`
+        );
     }
 
-    throw new ValidationError(
-        `No available ${protocol.toUpperCase()} port in ${server.config.publishedPortStart}-${server.config.publishedPortEnd}.`
-    );
+    reserved.set(publishedPortKey(publishedPort, protocol), Date.now());
+    // Also mark it used so a batch request cannot hand out the same port twice.
+    used.add(publishedPortKey(publishedPort, protocol));
+    return publishedPort;
+}
+
+export async function allocatePublishedPort(
+    server : DockgeServer,
+    targetPortValue : unknown,
+    protocolValue : unknown,
+    currentEditorPorts : unknown
+) : Promise<PublishedPortAllocation> {
+    const targetPort = parseTargetPort(targetPortValue);
+    const protocol = parseProtocolValue(protocolValue);
+    if (!Array.isArray(currentEditorPorts)) {
+        throw new ValidationError("Current editor ports must be an array.");
+    }
+    requireHostIP(server);
+
+    const used = await collectUsedPorts(server, currentEditorPorts);
+    const publishedPort = takeNextPort(server, protocol, used, activeReservations(server));
+
+    return {
+        publishedPort,
+        targetPort,
+        protocol,
+        mapping: formatPublishedPortMapping(
+            server.config.publishedHostIPVariable,
+            publishedPort,
+            targetPort,
+            protocol
+        ),
+    };
+}
+
+export interface PublishedPortRequest {
+    serviceName : string;
+    index : number;
+    targetPort : number;
+    protocol : PublishedPortProtocol;
+}
+
+export interface BatchPublishedPortAllocation extends PublishedPortRequest {
+    publishedPort : number;
+}
+
+function parseBatchRequests(value : unknown) : PublishedPortRequest[] {
+    if (!Array.isArray(value)) {
+        throw new ValidationError("Port requests must be an array.");
+    }
+    if (value.length > 64) {
+        throw new ValidationError("Cannot allocate more than 64 ports at once.");
+    }
+
+    return value.map((item) => {
+        if (!item || typeof item !== "object") {
+            throw new ValidationError("Each port request must be an object.");
+        }
+        const request = item as Record<string, unknown>;
+        if (typeof request.serviceName !== "string" || request.serviceName === "") {
+            throw new ValidationError("Each port request needs a service name.");
+        }
+        if (!Number.isInteger(request.index) || (request.index as number) < 0) {
+            throw new ValidationError("Each port request needs a non-negative index.");
+        }
+        return {
+            serviceName: request.serviceName,
+            index: request.index as number,
+            targetPort: parseTargetPort(request.targetPort),
+            protocol: parseProtocolValue(request.protocol),
+        };
+    });
+}
+
+/**
+ * Allocate several ports against one snapshot of used ports, so a multi-service
+ * paste gets distinct host ports in a single round trip.
+ */
+export async function allocatePublishedPorts(
+    server : DockgeServer,
+    requestsValue : unknown,
+    currentEditorPorts : unknown
+) : Promise<BatchPublishedPortAllocation[]> {
+    const requests = parseBatchRequests(requestsValue);
+    if (!Array.isArray(currentEditorPorts)) {
+        throw new ValidationError("Current editor ports must be an array.");
+    }
+    if (requests.length === 0) {
+        return [];
+    }
+    requireHostIP(server);
+
+    const used = await collectUsedPorts(server, currentEditorPorts);
+    const reserved = activeReservations(server);
+
+    return requests.map(request => ({
+        ...request,
+        publishedPort: takeNextPort(server, request.protocol, used, reserved),
+    }));
 }

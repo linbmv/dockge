@@ -3,7 +3,7 @@ import { DockgeServer } from "../dockge-server";
 import { callbackError, callbackResult, checkLogin, DockgeSocket, ValidationError } from "../util-server";
 import { Stack } from "../stack";
 import { AgentSocket } from "../../common/agent-socket";
-import { allocatePublishedPort } from "../published-port-allocator";
+import { allocatePublishedPort, allocatePublishedPorts } from "../published-port-allocator";
 
 export class DockerSocketHandler extends AgentSocketHandler {
     create(socket : DockgeSocket, server : DockgeServer, agentSocket : AgentSocket) {
@@ -378,6 +378,19 @@ export class DockerSocketHandler extends AgentSocketHandler {
                 callbackResult({
                     ok: true,
                     allocation,
+                }, callback);
+            } catch (e) {
+                callbackError(e, callback);
+            }
+        });
+
+        agentSocket.on("allocatePublishedPorts", async (requests : unknown, currentEditorPorts : unknown, callback) => {
+            try {
+                checkLogin(socket);
+                const allocations = await allocatePublishedPorts(server, requests, currentEditorPorts);
+                callbackResult({
+                    ok: true,
+                    allocations,
                 }, callback);
             } catch (e) {
                 callbackError(e, callback);

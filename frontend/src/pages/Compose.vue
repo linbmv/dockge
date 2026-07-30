@@ -109,12 +109,93 @@
                                 </select>
                             </div>
                         </div>
+
+                        <!-- Paste an existing compose.yaml / .env -->
+                        <h4 class="mb-3">{{ $t("pasteCompose") }}</h4>
+                        <div class="shadow-box big-padding mb-3">
+                            <div class="form-text mb-2">{{ $t("pasteComposeHelp") }}</div>
+                            <textarea
+                                v-model="pastedCompose"
+                                class="form-control paste-area"
+                                rows="8"
+                                spellcheck="false"
+                                :placeholder="$t('pasteComposePlaceholder')"
+                            ></textarea>
+
+                            <label class="form-label mt-3">{{ $t("pasteEnvOptional") }}</label>
+                            <textarea
+                                v-model="pastedEnv"
+                                class="form-control paste-area"
+                                rows="4"
+                                spellcheck="false"
+                                placeholder="KEY=value"
+                            ></textarea>
+
+                            <div class="mt-3">
+                                <button class="btn btn-primary me-2" :disabled="!pastedCompose.trim()" @click="applyPastedCompose">
+                                    <font-awesome-icon icon="save" class="me-1" />
+                                    {{ $t("usePastedCompose") }}
+                                </button>
+                                <button v-if="pastedCompose || pastedEnv" class="btn btn-normal" @click="pastedCompose = ''; pastedEnv = ''; pasteError = '';">
+                                    {{ $t("clear") }}
+                                </button>
+                            </div>
+                            <div v-if="pasteError" class="text-danger mt-2">{{ pasteError }}</div>
+                        </div>
+
+                        <!-- Network / port presets -->
+                        <h4 class="mb-3">{{ $t("networkAndPortPresets") }}</h4>
+                        <div class="shadow-box big-padding mb-3">
+                            <div class="form-text mb-3">{{ $t("networkAndPortPresetsHelp") }}</div>
+
+                            <div v-if="stackDefaults.defaultExternalNetwork" class="mb-3">
+                                <button
+                                    class="btn btn-normal me-2"
+                                    :disabled="pendingNetworkServices.length === 0"
+                                    @click="applyNetworkPreset"
+                                >
+                                    {{ $t("joinSharedNetwork", [ stackDefaults.defaultExternalNetwork ]) }}
+                                </button>
+                                <span v-if="pendingNetworkServices.length > 0" class="form-text">
+                                    {{ $t("joinSharedNetworkPending", [ pendingNetworkServices.join(", ") ]) }}
+                                </span>
+                                <span v-else class="form-text">{{ $t("joinSharedNetworkDone") }}</span>
+                            </div>
+
+                            <div>
+                                <button
+                                    class="btn btn-normal me-2"
+                                    :disabled="allocatingPorts || portPreset.rewritable.length === 0 || !stackDefaults.publishedHostIPValue"
+                                    @click="applyPortPreset"
+                                >
+                                    <span v-if="allocatingPorts" class="spinner-border spinner-border-sm me-1"></span>
+                                    {{ $t("pinPortsToTailnet") }}
+                                </button>
+
+                                <div v-if="!stackDefaults.publishedHostIPValue" class="form-text text-warning mt-2">
+                                    {{ $t("publishedHostIPMissing", [ stackDefaults.publishedHostIPVariable ]) }}
+                                </div>
+                                <ul v-else-if="portPreset.rewritable.length > 0" class="preset-list mt-2">
+                                    <li v-for="entry in portPreset.rewritable" :key="entry.serviceName + ':' + entry.index">
+                                        <code>{{ entry.serviceName }}</code> — {{ entry.original }}
+                                    </li>
+                                </ul>
+                                <div v-else class="form-text mt-2">{{ $t("pinPortsToTailnetDone") }}</div>
+
+                                <ul v-if="portPreset.skipped.length > 0" class="preset-list mt-2 text-warning">
+                                    <li v-for="entry in portPreset.skipped" :key="'skip-' + entry.serviceName + ':' + entry.index">
+                                        <code>{{ entry.serviceName }}</code> — {{ entry.original }}
+                                        <span class="ms-1">({{ $t("portPresetSkip_" + entry.skipReason) }})</span>
+                                    </li>
+                                </ul>
+                            </div>
+                        </div>
                     </div>
 
                     <!-- Containers -->
                     <h4 class="mb-3">{{ $tc("container", 2) }}</h4>
 
-                    <div v-if="isEditMode" class="input-group mb-3">
+                    <div v-if="isEditMode && !isAdd" class="input-group mb-3">
                         <input
                             v-model="newContainerName"
                             :placeholder="$t(`New Container Name...`)"
@@ -126,12 +207,16 @@
                         </button>
                     </div>
 
+                    <div v-if="isAdd && serviceNames.length === 0" class="shadow-box big-padding mb-3 form-text">
+                        {{ $t("noServicesYet") }}
+                    </div>
+
                     <div ref="containerList">
                         <Container
                             v-for="(service, name) in jsonConfig.services"
                             :key="name"
                             :name="name"
-                            :is-edit-mode="isEditMode"
+                            :is-edit-mode="isEditMode && !isAdd"
                             :first="name === Object.keys(jsonConfig.services)[0]"
                             :serviceStatus="serviceStatusList[name]"
                             :dockerStats="dockerStats"
@@ -144,7 +229,7 @@
                     <button v-if="false && isEditMode && jsonConfig.services && Object.keys(jsonConfig.services).length > 0" class="btn btn-normal mb-3" @click="addContainer">{{ $t("addContainer") }}</button>
 
                     <!-- General -->
-                    <div v-if="isEditMode">
+                    <div v-if="isEditMode && !isAdd">
                         <h4 class="mb-3">{{ $t("extra") }}</h4>
                         <div class="shadow-box big-padding mb-3">
                             <!-- URLs -->
@@ -212,7 +297,7 @@
                         </div>
                     </div>
 
-                    <div v-if="isEditMode">
+                    <div v-if="isEditMode && !isAdd">
                         <!-- Volumes -->
                         <div v-if="false">
                             <h4 class="mb-3">{{ $tc("volume", 2) }}</h4>
@@ -273,6 +358,12 @@ import NetworkInput from "../components/NetworkInput.vue";
 import dotenv from "dotenv";
 import { ref } from "vue";
 import { resolveRequiredEnvironmentVariable } from "../../../common/published-port";
+import {
+    applyDefaultExternalNetworkToDoc,
+    applyPortRewritesToDoc,
+    planDefaultExternalNetwork,
+    planPortPreset
+} from "../../../common/compose-preset";
 
 const template = `
 services:
@@ -365,6 +456,10 @@ export default {
             newContainerName: "",
             stopServiceStatusTimeout: false,
             stopDockerStatsTimeout: false,
+            pastedCompose: "",
+            pastedEnv: "",
+            pasteError: "",
+            allocatingPorts: false,
         };
     },
     computed: {
@@ -401,6 +496,26 @@ export default {
 
         isAdd() {
             return this.$route.path === "/compose" && !this.submitted;
+        },
+
+        serviceNames() {
+            if (!this.jsonConfig.services || typeof this.jsonConfig.services !== "object") {
+                return [];
+            }
+            return Object.keys(this.jsonConfig.services);
+        },
+
+        /**
+         * Which `ports:` entries the Tailnet preset can pin, and which it will
+         * leave alone. Recomputed from the editor content, so it always
+         * describes what is actually in the YAML right now.
+         */
+        portPreset() {
+            return planPortPreset(this.jsonConfig, this.stackDefaults.publishedHostIPVariable);
+        },
+
+        pendingNetworkServices() {
+            return planDefaultExternalNetwork(this.jsonConfig, this.stackDefaults.defaultExternalNetwork);
         },
 
         /**
@@ -526,7 +641,11 @@ export default {
             };
 
             this.yamlCodeChange();
-            this.applyDefaultExternalNetwork();
+            // Only seeds the starter template; pasted content is left untouched
+            // until the user applies the preset explicitly.
+            this.applyPresetToDocument(
+                doc => applyDefaultExternalNetworkToDoc(doc, this.stackDefaults.defaultExternalNetwork)
+            );
 
         } else {
             this.stack.name = this.$route.params.stackName;
@@ -587,15 +706,115 @@ export default {
             }
         },
 
-        applyDefaultExternalNetwork() {
-            if (!this.jsonConfig.services || typeof this.jsonConfig.services !== "object") {
+        applyPastedCompose() {
+            this.pasteError = "";
+            const trimmed = this.pastedCompose.trim();
+            if (!trimmed) {
                 return;
             }
-            for (const service of Object.values(this.jsonConfig.services)) {
-                if (service && typeof service === "object") {
-                    this.ensureDefaultExternalNetworkForService(service);
+
+            try {
+                this.yamlToJSON(trimmed);
+            } catch (e) {
+                this.pasteError = e.message || String(e);
+                return;
+            }
+
+            this.stack.composeYAML = trimmed;
+            if (this.pastedEnv.trim()) {
+                this.stack.composeENV = this.pastedEnv.trim();
+            }
+            this.pastedCompose = "";
+            this.pastedEnv = "";
+        },
+
+        /**
+         * Run a preset against the YAML document itself, then push the result
+         * back into the editor. Going through the document rather than
+         * `jsonConfig` keeps the pasted file's comments, key order and quoting.
+         */
+        applyPresetToDocument(mutate) {
+            let doc;
+            try {
+                doc = parseDocument(this.stack.composeYAML);
+                if (doc.errors.length > 0) {
+                    throw doc.errors[0];
+                }
+            } catch (e) {
+                this.$root.toastError(e.message || String(e));
+                return 0;
+            }
+
+            const changed = mutate(doc);
+            if (changed > 0) {
+                this.stack.composeYAML = doc.toString();
+                this.yamlCodeChange();
+            }
+            return changed;
+        },
+
+        applyNetworkPreset() {
+            const attached = this.applyPresetToDocument(
+                doc => applyDefaultExternalNetworkToDoc(doc, this.stackDefaults.defaultExternalNetwork)
+            );
+            if (attached > 0) {
+                this.$root.toastSuccess(this.$t("networkPresetApplied", [ attached ]));
+            }
+        },
+
+        collectCurrentEditorPorts() {
+            const ports = [];
+            for (const config of [ this.jsonConfig, this.envsubstJSONConfig ]) {
+                for (const service of Object.values(config.services ?? {})) {
+                    if (service && typeof service === "object" && Array.isArray(service.ports)) {
+                        ports.push(...service.ports);
+                    }
                 }
             }
+            return ports;
+        },
+
+        applyPortPreset() {
+            const plan = this.portPreset;
+            if (plan.rewritable.length === 0) {
+                return;
+            }
+
+            const requests = plan.rewritable.map(entry => ({
+                serviceName: entry.serviceName,
+                index: entry.index,
+                targetPort: Number(entry.target),
+                protocol: entry.protocol,
+            }));
+
+            this.allocatingPorts = true;
+            this.$root.emitAgent(
+                this.endpoint,
+                "allocatePublishedPorts",
+                requests,
+                this.collectCurrentEditorPorts(),
+                (res) => {
+                    this.allocatingPorts = false;
+                    if (!res?.ok || !Array.isArray(res.allocations)) {
+                        if (res) {
+                            this.$root.toastRes(res);
+                        }
+                        return;
+                    }
+
+                    const changed = this.applyPresetToDocument(
+                        doc => applyPortRewritesToDoc(
+                            doc,
+                            plan,
+                            res.allocations,
+                            this.stackDefaults.publishedHostIPVariable
+                        )
+                    );
+                    if (changed > 0) {
+                        this.$root.toastSuccess(this.$t("portPresetApplied", [ changed ]));
+                    }
+                }
+            );
         },
 
         startServiceStatusTimeout() {
@@ -962,6 +1181,22 @@ export default {
 .editor-box {
     font-family: 'JetBrains Mono', monospace;
     font-size: 14px;
+}
+
+.paste-area {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+}
+
+.preset-list {
+    font-size: 13px;
+    list-style: none;
+    margin-bottom: 0;
+    padding-left: 0;
+
+    li {
+        padding: 2px 0;
+    }
 }
 
 .agent-name {
