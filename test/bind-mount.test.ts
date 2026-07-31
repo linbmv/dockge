@@ -21,6 +21,9 @@ async function temporaryStack(t: TestContext) {
 }
 
 async function createTestSymlink(target: string, linkPath: string) {
+    if (process.platform === "win32") {
+        return false;
+    }
     try {
         await fs.symlink(target, linkPath);
         return true;

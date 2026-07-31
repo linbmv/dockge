@@ -27,6 +27,9 @@ async function projectSandbox(t : TestContext) {
 }
 
 async function createTestSymlink(target: string, linkPath: string) {
+    if (process.platform === "win32") {
+        return false;
+    }
     try {
         await fsAsync.symlink(target, linkPath);
         return true;
