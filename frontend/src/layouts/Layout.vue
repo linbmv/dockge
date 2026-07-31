@@ -1,92 +1,102 @@
 <template>
     <div :class="classes">
         <div v-if="! $root.socketIO.connected && ! $root.socketIO.firstConnect" class="lost-connection">
-            <div class="container-fluid">
-                {{ $root.socketIO.connectionErrorMsg }}
+            <div class="container-fluid d-flex align-items-center justify-content-between">
+                <span>
+                    <font-awesome-icon icon="triangle-exclamation" class="me-2" />
+                    {{ $root.socketIO.connectionErrorMsg }}
+                </span>
                 <div v-if="$root.socketIO.showReverseProxyGuide">
                     {{ $t("reverseProxyMsg1") }} <a href="https://github.com/louislam/uptime-kuma/wiki/Reverse-Proxy" target="_blank">{{ $t("reverseProxyMsg2") }}</a>
                 </div>
             </div>
         </div>
 
-        <!-- Desktop header -->
-        <header v-if="! $root.isMobile" class="d-flex flex-wrap justify-content-center py-3 mb-3 border-bottom">
-            <router-link to="/" class="d-flex align-items-center mb-3 mb-md-0 me-md-auto text-dark text-decoration-none">
-                <object class="bi me-2 ms-4" width="40" height="40" data="/icon.svg" />
-                <span class="fs-4 title">Dockge</span>
-            </router-link>
-
-            <a v-if="hasNewVersion" target="_blank" href="https://github.com/louislam/dockge/releases" class="btn btn-warning me-3">
-                <font-awesome-icon icon="arrow-alt-circle-up" /> {{ $t("newUpdate") }}
-            </a>
-
-            <ul class="nav nav-pills">
-                <li v-if="$root.loggedIn" class="nav-item me-2">
-                    <router-link to="/" class="nav-link">
-                        <font-awesome-icon icon="home" /> {{ $t("home") }}
-                    </router-link>
-                </li>
-
-                <li v-if="$root.loggedIn" class="nav-item me-2">
-                    <router-link to="/console" class="nav-link">
-                        <font-awesome-icon icon="terminal" /> {{ $t("console") }}
-                    </router-link>
-                </li>
-
-                <li v-if="$root.loggedIn" class="nav-item">
-                    <div class="dropdown dropdown-profile-pic">
-                        <div class="nav-link" data-bs-toggle="dropdown">
-                            <div class="profile-pic">{{ $root.usernameFirstChar }}</div>
-                            <font-awesome-icon icon="angle-down" />
-                        </div>
-
-                        <!-- Header's Dropdown Menu -->
-                        <ul class="dropdown-menu">
-                            <!-- Username -->
-                            <li>
-                                <i18n-t v-if="$root.username != null" tag="span" keypath="signedInDisp" class="dropdown-item-text">
-                                    <strong>{{ $root.username }}</strong>
-                                </i18n-t>
-                                <span v-if="$root.username == null" class="dropdown-item-text">{{ $t("signedInDispDisabled") }}</span>
-                            </li>
-
-                            <li><hr class="dropdown-divider"></li>
-
-                            <!-- Functions -->
-
-                            <!--<li>
-                                <router-link to="/registry" class="dropdown-item" :class="{ active: $route.path.includes('settings') }">
-                                    <font-awesome-icon icon="warehouse" /> {{ $t("registry") }}
-                                </router-link>
-                            </li>-->
-
-                            <li>
-                                <button class="dropdown-item" @click="scanFolder">
-                                    <font-awesome-icon icon="arrows-rotate" /> {{ $t("scanFolder") }}
-                                </button>
-                            </li>
-
-                            <li>
-                                <router-link to="/settings/general" class="dropdown-item" :class="{ active: $route.path.includes('settings') }">
-                                    <font-awesome-icon icon="cog" /> {{ $t("Settings") }}
-                                </router-link>
-                            </li>
-
-                            <li>
-                                <button class="dropdown-item" @click="$root.logout">
-                                    <font-awesome-icon icon="sign-out-alt" />
-                                    {{ $t("Logout") }}
-                                </button>
-                            </li>
-                        </ul>
+        <!-- Modern Header Navbar -->
+        <header v-if="! $root.isMobile" class="modern-header px-4 py-3 mb-4">
+            <div class="header-inner d-flex align-items-center justify-content-between">
+                <!-- Brand Logo & Badge -->
+                <router-link to="/" class="brand-link d-flex align-items-center text-decoration-none">
+                    <div class="logo-wrapper me-3">
+                        <object class="logo-icon" width="32" height="32" data="/icon.svg" />
                     </div>
-                </li>
-            </ul>
+                    <div class="brand-text">
+                        <span class="title">Dockge</span>
+                        <span class="version-tag badge rounded-pill bg-dark-subtle ms-2" style="font-size: 11px;">v{{ $root.info.version || '1.5.0' }}</span>
+                    </div>
+                </router-link>
+
+                <div class="d-flex align-items-center gap-3">
+                    <!-- Update Pill -->
+                    <a v-if="hasNewVersion" target="_blank" href="https://github.com/louislam/dockge/releases" class="btn btn-warning update-btn btn-sm">
+                        <font-awesome-icon icon="arrow-alt-circle-up" class="me-1" /> {{ $t("newUpdate") }}
+                    </a>
+
+                    <!-- Nav items -->
+                    <ul class="nav nav-pills align-items-center gap-2 m-0">
+                        <li v-if="$root.loggedIn" class="nav-item">
+                            <router-link to="/" class="nav-link px-3 py-2">
+                                <font-awesome-icon icon="home" class="me-1" /> {{ $t("home") }}
+                            </router-link>
+                        </li>
+
+                        <li v-if="$root.loggedIn" class="nav-item">
+                            <router-link to="/console" class="nav-link px-3 py-2">
+                                <font-awesome-icon icon="terminal" class="me-1" /> {{ $t("console") }}
+                            </router-link>
+                        </li>
+
+                        <li v-if="$root.loggedIn" class="nav-item">
+                            <div class="dropdown dropdown-profile-pic">
+                                <div class="nav-link profile-trigger px-3 py-2" data-bs-toggle="dropdown">
+                                    <div class="profile-pic">{{ $root.usernameFirstChar }}</div>
+                                    <font-awesome-icon icon="angle-down" class="ms-1 dropdown-arrow" />
+                                </div>
+
+                                <!-- Header's Dropdown Menu -->
+                                <ul class="dropdown-menu dropdown-menu-end shadow-lg">
+                                    <!-- Username -->
+                                    <li class="px-3 py-2">
+                                        <i18n-t v-if="$root.username != null" tag="span" keypath="signedInDisp" class="dropdown-item-text">
+                                            <strong class="text-info">{{ $root.username }}</strong>
+                                        </i18n-t>
+                                        <span v-if="$root.username == null" class="dropdown-item-text text-muted">{{ $t("signedInDispDisabled") }}</span>
+                                    </li>
+
+                                    <li><hr class="dropdown-divider my-1"></li>
+
+                                    <li>
+                                        <button class="dropdown-item py-2" @click="scanFolder">
+                                            <font-awesome-icon icon="arrows-rotate" class="me-2 text-primary" /> {{ $t("scanFolder") }}
+                                        </button>
+                                    </li>
+
+                                    <li>
+                                        <router-link to="/settings/general" class="dropdown-item py-2" :class="{ active: $route.path.includes('settings') }">
+                                            <font-awesome-icon icon="cog" class="me-2 text-primary" /> {{ $t("Settings") }}
+                                        </router-link>
+                                    </li>
+
+                                    <li><hr class="dropdown-divider my-1"></li>
+
+                                    <li>
+                                        <button class="dropdown-item py-2 text-danger" @click="$root.logout">
+                                            <font-awesome-icon icon="sign-out-alt" class="me-2" />
+                                            {{ $t("Logout") }}
+                                        </button>
+                                    </li>
+                                </ul>
+                            </div>
+                        </li>
+                    </ul>
+                </div>
+            </div>
         </header>
 
-        <main>
-            <div v-if="$root.socketIO.connecting" class="container mt-5">
-                <h4>{{ $t("connecting...") }}</h4>
+        <main class="main-content">
+            <div v-if="$root.socketIO.connecting" class="container mt-5 text-center">
+                <div class="spinner-border text-info mb-3" role="status"></div>
+                <h4 class="text-muted">{{ $t("connecting...") }}</h4>
             </div>
 
             <router-view v-if="$root.loggedIn" />
@@ -157,126 +167,92 @@ export default {
 
 <style lang="scss" scoped>
 @import "../styles/vars.scss";
+@import "../styles/design-tokens.scss";
 
-.nav-link {
-    &.status-page {
-        background-color: rgba(255, 255, 255, 0.1);
+.modern-header {
+    background: rgba(15, 20, 25, 0.75);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    position: sticky;
+    top: 0;
+    z-index: 1000;
+
+    .header-inner {
+        max-width: 1600px;
+        margin: 0 auto;
     }
 }
 
-.bottom-nav {
-    z-index: 1000;
-    position: fixed;
-    bottom: 0;
-    height: calc(60px + env(safe-area-inset-bottom));
-    width: 100%;
-    left: 0;
-    background-color: #fff;
-    box-shadow: 0 15px 47px 0 rgba(0, 0, 0, 0.05), 0 5px 14px 0 rgba(0, 0, 0, 0.05);
-    text-align: center;
-    white-space: nowrap;
-    padding: 0 10px env(safe-area-inset-bottom);
+.brand-link {
+    .logo-wrapper {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 38px;
+        height: 38px;
+        border-radius: var(--radius-base);
+        background: rgba(56, 189, 248, 0.1);
+        border: 1px solid rgba(56, 189, 248, 0.2);
+        transition: all var(--transition-fast);
 
-    a {
-        text-align: center;
-        width: 25%;
-        display: inline-block;
-        height: 100%;
-        padding: 8px 10px 0;
-        font-size: 13px;
-        color: #c1c1c1;
-        overflow: hidden;
-        text-decoration: none;
+        &:hover {
+            transform: scale(1.05);
+            border-color: rgba(56, 189, 248, 0.4);
+            box-shadow: var(--glow-cyan);
+        }
+    }
+
+    .title {
+        font-family: var(--font-display);
+        font-size: var(--text-xl);
+        font-weight: 700;
+        letter-spacing: var(--tracking-tight);
+        background: linear-gradient(135deg, #38bdf8 0%, #6ee7b7 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+    }
+}
+
+.nav-pills {
+    .nav-link {
+        color: #94a3b8;
+        font-weight: 500;
+        font-size: var(--text-sm);
+        border-radius: var(--radius-pill);
+        transition: all var(--transition-fast);
+
+        &:hover {
+            color: #f8fafc;
+            background: rgba(255, 255, 255, 0.06);
+        }
 
         &.router-link-exact-active, &.active {
-            color: $primary;
-            font-weight: bold;
-        }
-
-        div {
-            font-size: 20px;
+            color: #0f1419;
+            background: linear-gradient(135deg, #38bdf8 0%, #6ee7b7 100%);
+            font-weight: 600;
+            box-shadow: 0 0 15px rgba(56, 189, 248, 0.3);
         }
     }
 }
 
-main {
-    min-height: calc(100vh - 160px);
-}
-
-.title {
-    font-weight: bold;
-}
-
-.nav {
-    margin-right: 25px;
-}
-
-.lost-connection {
-    padding: 5px;
-    background-color: crimson;
-    color: white;
-    position: fixed;
-    width: 100%;
-    z-index: 99999;
-}
-
-// Profile Pic Button with Dropdown
 .dropdown-profile-pic {
     user-select: none;
 
-    .nav-link {
-        cursor: pointer;
+    .profile-trigger {
         display: flex;
-        gap: 6px;
         align-items: center;
-        background-color: rgba(200, 200, 200, 0.2);
-        padding: 0.5rem 0.8rem;
+        gap: 6px;
+        cursor: pointer;
+        border-radius: var(--radius-pill);
+        background: rgba(255, 255, 255, 0.05);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        transition: all var(--transition-fast);
 
         &:hover {
-            background-color: rgba(255, 255, 255, 0.2);
-        }
-    }
-
-    .dropdown-menu {
-        transition: all 0.2s;
-        padding-left: 0;
-        padding-bottom: 0;
-        margin-top: 8px !important;
-        border-radius: 16px;
-        overflow: hidden;
-
-        .dropdown-divider {
-            margin: 0;
-            border-top: 1px solid rgba(0, 0, 0, 0.4);
-            background-color: transparent;
-        }
-
-        .dropdown-item-text {
-            font-size: 14px;
-            padding-bottom: 0.7rem;
-        }
-
-        .dropdown-item {
-            padding: 0.7rem 1rem;
-        }
-
-        .dark & {
-            background-color: $dark-bg;
-            color: $dark-font-color;
-            border-color: $dark-border-color;
-
-            .dropdown-item {
-                color: $dark-font-color;
-
-                &.active {
-                    color: $dark-font-color2;
-                    background-color: $highlight !important;
-                }
-
-                &:hover {
-                    background-color: $dark-bg2;
-                }
-            }
+            background: rgba(255, 255, 255, 0.1);
+            border-color: rgba(255, 255, 255, 0.15);
         }
     }
 
@@ -284,29 +260,68 @@ main {
         display: flex;
         align-items: center;
         justify-content: center;
-        color: white;
-        background-color: $primary;
-        width: 24px;
-        height: 24px;
-        margin-right: 5px;
-        border-radius: 50rem;
-        font-weight: bold;
-        font-size: 10px;
+        color: #0f1419;
+        background: linear-gradient(135deg, #38bdf8 0%, #6ee7b7 100%);
+        width: 26px;
+        height: 26px;
+        border-radius: 50%;
+        font-weight: 700;
+        font-size: 11px;
+    }
+
+    .dropdown-menu {
+        background: rgba(22, 29, 38, 0.95);
+        backdrop-filter: blur(20px);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: var(--radius-xl);
+        padding: 8px;
+        min-width: 200px;
+        margin-top: 8px !important;
+
+        .dropdown-item {
+            color: #cbd5e1;
+            font-size: var(--text-sm);
+            border-radius: var(--radius-lg);
+            transition: all var(--transition-fast);
+
+            &:hover {
+                color: #f8fafc;
+                background: rgba(255, 255, 255, 0.08);
+                transform: translateX(2px);
+            }
+
+            &.active {
+                background: rgba(56, 189, 248, 0.15);
+                color: #38bdf8;
+            }
+        }
     }
 }
 
-.dark {
-    header {
-        background-color: $dark-header-bg;
-        border-bottom-color: $dark-header-bg !important;
+.update-btn {
+    border-radius: var(--radius-pill);
+    font-size: var(--text-xs);
+    font-weight: 600;
+    box-shadow: 0 0 15px rgba(245, 158, 11, 0.3);
+}
 
-        span {
-            color: #f0f6fc;
-        }
-    }
+.lost-connection {
+    padding: 8px 16px;
+    background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+    color: white;
+    font-size: var(--text-sm);
+    font-weight: 500;
+    position: fixed;
+    top: 0;
+    width: 100%;
+    z-index: 99999;
+    box-shadow: 0 4px 12px rgba(239, 68, 68, 0.3);
+}
 
-    .bottom-nav {
-        background-color: $dark-bg;
-    }
+main.main-content {
+    min-height: calc(100vh - 100px);
+    max-width: 1600px;
+    margin: 0 auto;
+    padding: 0 16px;
 }
 </style>

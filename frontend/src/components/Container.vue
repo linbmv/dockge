@@ -502,13 +502,29 @@ export default defineComponent({
 
 <style scoped lang="scss">
 @import "../styles/vars";
+@import "../styles/design-tokens.scss";
 
 .container {
+    background: rgba(22, 29, 38, 0.8);
+    backdrop-filter: blur(12px);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: var(--radius-xl);
+    padding: var(--space-6);
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
+    transition: all var(--transition-base);
+
+    &:hover {
+        border-color: rgba(255, 255, 255, 0.15);
+    }
+
     .image {
         font-size: 0.8rem;
-        color: #6c757d;
+        color: #94a3b8;
+        font-family: var(--font-mono);
+
         .tag {
-            color: #33383b;
+            color: #38bdf8;
+            font-weight: 600;
         }
     }
 
@@ -518,12 +534,13 @@ export default defineComponent({
         height: 100%;
         width: 100%;
         align-items: center;
-        justify-content: end;
+        justify-content: flex-end;
     }
 
     .stats {
         font-size: 0.8rem;
-        color: #6c757d;
+        color: #94a3b8;
+        font-family: var(--font-mono);
     }
 
     .protocol-select {

@@ -117,64 +117,61 @@ export default {
 
 <style lang="scss" scoped>
 @import "../styles/vars.scss";
-
-.small-padding {
-    padding-left: 5px !important;
-    padding-right: 5px !important;
-}
-
-.collapse-padding {
-    padding-left: 8px !important;
-    padding-right: 2px !important;
-}
+@import "../styles/design-tokens.scss";
 
 .item {
     text-decoration: none;
     display: flex;
     align-items: center;
-    min-height: 52px;
-    border-radius: 10px;
-    transition: all ease-in-out 0.15s;
+    min-height: 44px;
+    border-radius: var(--radius-lg);
+    transition: all var(--transition-fast);
     width: 100%;
-    padding: 5px 8px;
-    &.disabled {
-        opacity: 0.3;
+    padding: 8px 10px;
+    margin-bottom: 4px;
+    background: transparent;
+    border: 1px solid transparent;
+    color: #cbd5e1;
+
+    &.dim {
+        opacity: 0.5;
     }
+
     &:hover {
-        background-color: $highlight-white;
+        background: rgba(255, 255, 255, 0.05);
+        color: #f8fafc;
+        transform: translateX(2px);
     }
-    &.active {
-        background-color: #cdf8f4;
+
+    &.router-link-active, &.active {
+        background: rgba(56, 189, 248, 0.12);
+        border-color: rgba(56, 189, 248, 0.3);
+        color: #38bdf8;
+        font-weight: 600;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+
+        .title span {
+            color: #38bdf8;
+        }
     }
+
     .title {
-        margin-top: -4px;
+        flex: 1;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+
+        span {
+            font-size: var(--text-sm);
+            font-weight: 500;
+            color: #e2e8f0;
+            transition: color var(--transition-fast);
+        }
     }
+
     .endpoint {
-        font-size: 12px;
-        color: $dark-font-color3;
+        font-size: var(--text-xs);
+        color: #64748b;
     }
 }
-
-.collapsed {
-    transform: rotate(-90deg);
-}
-
-.animated {
-    transition: all 0.2s $easing-in;
-}
-
-.select-input-wrapper {
-    float: left;
-    margin-top: 15px;
-    margin-left: 3px;
-    margin-right: 10px;
-    padding-left: 4px;
-    position: relative;
-    z-index: 15;
-}
-
-.dim {
-    opacity: 0.5;
-}
-
 </style>

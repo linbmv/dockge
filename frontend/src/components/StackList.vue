@@ -1,55 +1,64 @@
 <template>
-    <div class="shadow-box mb-3" :style="boxStyle">
+    <div class="shadow-box-modern mb-3" :style="boxStyle">
         <div class="list-header">
-            <div class="header-top">
-                <!-- TODO -->
-                <button
-                    v-if="false" class="btn btn-outline-normal ms-2" :class="{ 'active': selectMode }" type="button"
-                    @click="selectMode = !selectMode"
-                >
-                    {{ $t("Select") }}
-                </button>
-
-                <div class="placeholder"></div>
+            <!-- Search bar -->
+            <div class="search-container mb-2">
                 <div class="search-wrapper">
-                    <a v-if="searchText == ''" class="search-icon">
-                        <font-awesome-icon icon="search" />
-                    </a>
-                    <a v-if="searchText != ''" class="search-icon" style="cursor: pointer" @click="clearSearchText">
+                    <font-awesome-icon icon="search" class="search-icon" />
+                    <input
+                        v-model="searchText"
+                        class="form-control search-input"
+                        :placeholder="$t('Search...')"
+                        autocomplete="off"
+                    />
+                    <button v-if="searchText !== ''" type="button" class="btn-clear" @click="clearSearchText">
                         <font-awesome-icon icon="times" />
-                    </a>
-                    <form>
-                        <input v-model="searchText" class="form-control search-input" autocomplete="off" />
-                    </form>
+                    </button>
                 </div>
             </div>
 
-            <!-- TODO -->
-            <div v-if="false" class="header-filter">
-                <!--<StackListFilter :filterState="filterState" @update-filter="updateFilter" />-->
-            </div>
-
-            <!-- TODO: Selection Controls -->
-            <div v-if="selectMode && false" class="selection-controls px-2 pt-2">
-                <input v-model="selectAll" class="form-check-input select-input" type="checkbox" />
-
-                <button class="btn-outline-normal" @click="pauseDialog">
-                    <font-awesome-icon icon="pause" size="sm" /> {{
-                        $t("Pause") }}
+            <!-- Status filter chips -->
+            <div class="status-filters d-flex align-items-center gap-1">
+                <button
+                    class="filter-chip"
+                    :class="{ active: selectedStatusFilter === 'all' }"
+                    @click="selectedStatusFilter = 'all'"
+                >
+                    {{ $t("All") || "All" }}
                 </button>
-                <button class="btn-outline-normal" @click="resumeSelected">
-                    <font-awesome-icon icon="play" size="sm" />
-                    {{ $t("Resume") }}
+                <button
+                    class="filter-chip filter-chip-active"
+                    :class="{ active: selectedStatusFilter === 'active' }"
+                    @click="selectedStatusFilter = 'active'"
+                >
+                    <span class="dot dot-active"></span>
+                    {{ $t("active") }}
                 </button>
-
-                <span v-if="selectedStackCount > 0">
-                    {{ $t("selectedStackCount", [selectedStackCount]) }}
-                </span>
+                <button
+                    class="filter-chip filter-chip-exited"
+                    :class="{ active: selectedStatusFilter === 'exited' }"
+                    @click="selectedStatusFilter = 'exited'"
+                >
+                    <span class="dot dot-exited"></span>
+                    {{ $t("exited") }}
+                </button>
+                <button
+                    class="filter-chip filter-chip-inactive"
+                    :class="{ active: selectedStatusFilter === 'inactive' }"
+                    @click="selectedStatusFilter = 'inactive'"
+                >
+                    <span class="dot dot-inactive"></span>
+                    {{ $t("inactive") }}
+                </button>
             </div>
         </div>
+
         <div ref="stackList" class="stack-list" :class="{ scrollbar: scrollbar }" :style="stackListStyle">
-            <div v-if="agentStackList[0] && agentStackList[0].stacks.length === 0" class="text-center mt-3">
-                <router-link to="/compose">{{ $t("addFirstStackMsg") }}</router-link>
+            <div v-if="agentStackList[0] && agentStackList[0].stacks.length === 0" class="text-center py-4 text-muted">
+                <p class="mb-2">{{ $t("No stacks found") || "No stacks found" }}</p>
+                <router-link to="/compose" class="btn btn-sm btn-primary">
+                    <font-awesome-icon icon="plus" class="me-1" /> {{ $t("addFirstStackMsg") }}
+                </router-link>
             </div>
             <div v-for="(agent, agentIndex) in agentStackList" :key="agentIndex" class="stack-list-inner">
                 <div
@@ -80,7 +89,7 @@
 <script>
 import Confirm from "../components/Confirm.vue";
 import StackListItem from "../components/StackListItem.vue";
-import { CREATED_FILE, CREATED_STACK, EXITED, RUNNING, UNKNOWN } from "../../../common/util-common";
+import { CREATED_FILE, CREATED_STACK, EXITED, RUNNING, UNKNOWN, statusNameShort } from "../../../common/util-common";
 
 export default {
     components: {
@@ -96,6 +105,7 @@ export default {
     data() {
         return {
             searchText: "",
+            selectedStatusFilter: "all",
             selectMode: false,
             selectAll: false,
             disableSelectAllWatcher: false,
@@ -148,6 +158,12 @@ export default {
                             || tag.value?.toLowerCase().includes(loweredSearchText));
                 }
 
+                // filter by selected status chip
+                let statusMatch = true;
+                if (this.selectedStatusFilter !== "all") {
+                    statusMatch = statusNameShort(stack.status) === this.selectedStatusFilter;
+                }
+
                 // filter by active
                 let activeMatch = true;
                 if (this.filterState.active != null && this.filterState.active.length > 0) {
@@ -162,7 +178,7 @@ export default {
                         .length > 0;
                 }
 
-                return searchTextMatch && activeMatch && tagsMatch;
+                return searchTextMatch && activeMatch && tagsMatch && statusMatch;
             });
 
             result.sort((m1, m2) => {
@@ -389,107 +405,165 @@ export default {
 
 <style lang="scss" scoped>
 @import "../styles/vars.scss";
+@import "../styles/design-tokens.scss";
 
-.shadow-box {
-    height: calc(100vh - 150px);
+.shadow-box-modern {
+    background: rgba(22, 29, 38, 0.8);
+    backdrop-filter: blur(12px);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: var(--radius-xl);
+    padding: 14px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
     position: sticky;
-    top: 10px;
-}
-
-.small-padding {
-    padding-left: 5px !important;
-    padding-right: 5px !important;
+    top: 80px;
+    height: calc(100vh - 120px);
+    display: flex;
+    flex-direction: column;
 }
 
 .list-header {
-    border-bottom: 1px solid #dee2e6;
-    border-radius: 10px 10px 0 0;
-    margin: -10px;
-    margin-bottom: 10px;
-    padding: 10px;
-
-    .dark & {
-        background-color: $dark-header-bg;
-        border-bottom: 0;
-    }
+    margin-bottom: 12px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
 }
 
-.header-top {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-}
-
-.header-filter {
-    display: flex;
-    align-items: center;
-}
-
-@media (max-width: 770px) {
-    .list-header {
-        margin: -20px;
-        margin-bottom: 10px;
-        padding: 5px;
-    }
+.search-container {
+    width: 100%;
 }
 
 .search-wrapper {
+    position: relative;
     display: flex;
     align-items: center;
-}
 
-.search-icon {
-    padding: 10px;
-    color: #c0c0c0;
+    .search-icon {
+        position: absolute;
+        left: 12px;
+        color: #64748b;
+        font-size: 13px;
+        pointer-events: none;
+    }
 
-    // Clear filter button (X)
-    svg[data-icon="times"] {
+    .search-input {
+        width: 100%;
+        padding-left: 36px;
+        padding-right: 32px;
+        height: 38px;
+        background: rgba(15, 20, 25, 0.6);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: var(--radius-pill);
+        color: #f8fafc;
+        font-size: var(--text-xs);
+        transition: all var(--transition-fast);
+
+        &::placeholder {
+            color: #64748b;
+        }
+
+        &:focus {
+            background: rgba(15, 20, 25, 0.9);
+            border-color: #38bdf8;
+            box-shadow: 0 0 12px rgba(56, 189, 248, 0.2);
+            outline: none;
+        }
+    }
+
+    .btn-clear {
+        position: absolute;
+        right: 10px;
+        background: transparent;
+        border: none;
+        color: #64748b;
+        padding: 4px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 50%;
         cursor: pointer;
-        transition: all ease-in-out 0.1s;
+        transition: color var(--transition-fast);
 
         &:hover {
-            opacity: 0.5;
+            color: #f8fafc;
         }
     }
 }
 
-.search-input {
-    max-width: 15em;
+.status-filters {
+    overflow-x: auto;
+    padding-bottom: 4px;
+    scrollbar-width: none;
+    &::-webkit-scrollbar {
+        display: none;
+    }
 }
 
-.stack-item {
-    width: 100%;
-}
-
-.tags {
-    margin-top: 4px;
-    padding-left: 67px;
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0;
-}
-
-.bottom-style {
-    padding-left: 67px;
-    margin-top: 5px;
-}
-
-.selection-controls {
-    margin-top: 5px;
-    display: flex;
+.filter-chip {
+    display: inline-flex;
     align-items: center;
-    gap: 10px;
+    gap: 4px;
+    padding: 4px 10px;
+    font-size: 11px;
+    font-weight: 500;
+    border-radius: var(--radius-pill);
+    background: rgba(255, 255, 255, 0.04);
+    color: #94a3b8;
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    cursor: pointer;
+    white-space: nowrap;
+    transition: all var(--transition-fast);
+
+    &:hover {
+        background: rgba(255, 255, 255, 0.08);
+        color: #f8fafc;
+    }
+
+    &.active {
+        background: rgba(56, 189, 248, 0.15);
+        color: #38bdf8;
+        border-color: rgba(56, 189, 248, 0.3);
+        font-weight: 600;
+    }
+
+    .dot {
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        display: inline-block;
+
+        &-active { background-color: #10b981; }
+        &-exited { background-color: #ef4444; }
+        &-inactive { background-color: #64748b; }
+    }
+}
+
+.stack-list {
+    flex: 1;
+    overflow-y: auto;
+    padding-right: 4px;
+
+    &.scrollbar {
+        &::-webkit-scrollbar {
+            width: 6px;
+        }
+        &::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+        }
+    }
 }
 
 .agent-select {
     cursor: pointer;
-    font-size: 14px;
-    font-weight: 500;
-    color: $dark-font-color3;
-    padding-left: 10px;
-    padding-right: 10px;
+    font-size: 12px;
+    font-weight: 600;
+    color: #64748b;
+    padding: 6px 8px;
     display: flex;
     align-items: center;
     user-select: none;
+
+    &:hover {
+        color: #94a3b8;
+    }
 }
 </style>
