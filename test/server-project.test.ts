@@ -26,6 +26,19 @@ async function projectSandbox(t : TestContext) {
     };
 }
 
+async function createTestSymlink(target: string, linkPath: string) {
+    try {
+        await fsAsync.symlink(target, linkPath);
+        return true;
+    } catch (error) {
+        const code = (error as NodeJS.ErrnoException).code;
+        if (process.platform === "win32" && (code === "EPERM" || code === "EACCES")) {
+            return false;
+        }
+        throw error;
+    }
+}
+
 async function createProject(projectsDir : string, name = "Local App") {
     const projectPath = path.join(projectsDir, name);
     await fsAsync.mkdir(projectPath);
@@ -33,13 +46,17 @@ async function createProject(projectsDir : string, name = "Local App") {
     await fsAsync.writeFile(path.join(projectPath, ".env"), "VALUE=server\n");
     await fsAsync.writeFile(path.join(projectPath, "Dockerfile"), "FROM scratch\n");
     await fsAsync.writeFile(path.join(projectPath, "run.sh"), "#!/bin/sh\n", { mode: 0o755 });
-    await fsAsync.symlink("run.sh", path.join(projectPath, "run-link"));
-    return projectPath;
+    const hasSymlink = await createTestSymlink("run.sh", path.join(projectPath, "run-link"));
+    return {
+        projectPath,
+        hasSymlink,
+    };
 }
 
 test("previews and atomically copies an allowed server project", async (t) => {
     const { projectsDir, stacksDir } = await projectSandbox(t);
-    const projectPath = await createProject(projectsDir);
+    const project = await createProject(projectsDir);
+    const projectPath = project.projectPath;
 
     const preview = await inspectServerProject(projectsDir, projectPath);
     assert.equal(preview.projectPath, await fsAsync.realpath(projectPath));
@@ -53,7 +70,9 @@ test("previews and atomically copies an allowed server project", async (t) => {
     const copiedPath = path.join(stacksDir, "local-app");
     assert.equal(await fsAsync.readFile(path.join(copiedPath, "Dockerfile"), "utf-8"), "FROM scratch\n");
     assert.equal((await fsAsync.stat(path.join(copiedPath, "run.sh"))).mode & 0o777, sourceMode);
-    assert.equal(await fsAsync.readlink(path.join(copiedPath, "run-link")), "run.sh");
+    if (project.hasSymlink) {
+        assert.equal(await fsAsync.readlink(path.join(copiedPath, "run-link")), "run.sh");
+    }
     assert.deepEqual(
         (await fsAsync.readdir(stacksDir)).filter(name => name.startsWith(".dockge-import-")),
         []
@@ -62,12 +81,14 @@ test("previews and atomically copies an allowed server project", async (t) => {
 
 test("rejects paths outside the configured server projects directory", async (t) => {
     const { sandbox, projectsDir } = await projectSandbox(t);
-    const outsidePath = await createProject(sandbox, "outside");
+    const outsidePath = (await createProject(sandbox, "outside")).projectPath;
     const linkedOutsidePath = path.join(projectsDir, "linked-outside");
-    await fsAsync.symlink(outsidePath, linkedOutsidePath);
+    const hasOutsideSymlink = await createTestSymlink(outsidePath, linkedOutsidePath);
 
     await assert.rejects(inspectServerProject(projectsDir, outsidePath), /inside the configured/);
-    await assert.rejects(inspectServerProject(projectsDir, linkedOutsidePath), /inside the configured/);
+    if (hasOutsideSymlink) {
+        await assert.rejects(inspectServerProject(projectsDir, linkedOutsidePath), /inside the configured/);
+    }
     await assert.rejects(inspectServerProject(projectsDir, projectsDir), /inside the configured/);
     await assert.rejects(inspectServerProject(projectsDir, "relative/project"), /must be absolute/);
 });
@@ -78,7 +99,7 @@ test("requires a root Compose file and refuses an existing Stack", async (t) => 
     await fsAsync.mkdir(emptyProject);
     await assert.rejects(inspectServerProject(projectsDir, emptyProject), /No Compose file/);
 
-    const projectPath = await createProject(projectsDir, "ready");
+    const projectPath = (await createProject(projectsDir, "ready")).projectPath;
     await fsAsync.mkdir(path.join(stacksDir, "existing"));
     await assert.rejects(
         copyServerProject(projectsDir, stacksDir, "existing", projectPath),

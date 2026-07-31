@@ -20,6 +20,19 @@ async function temporaryStack(t: TestContext) {
     return stackPath;
 }
 
+async function createTestSymlink(target: string, linkPath: string) {
+    try {
+        await fs.symlink(target, linkPath);
+        return true;
+    } catch (error) {
+        const code = (error as NodeJS.ErrnoException).code;
+        if (process.platform === "win32" && (code === "EPERM" || code === "EACCES")) {
+            return false;
+        }
+        throw error;
+    }
+}
+
 test("missing bind mount sources are grouped and suggested without guessing every suffixless path is a directory", async (t) => {
     const stackPath = await temporaryStack(t);
     const config = {
@@ -169,7 +182,10 @@ test("preparing bind sources rejects paths outside the stack and symlink escapes
     const outsideDirectory = await fs.mkdtemp(path.join(os.tmpdir(), "dockge-bind-mount-outside-"));
     t.after(() => fs.rm(outsideDirectory, { recursive: true,
         force: true }));
-    await fs.symlink(outsideDirectory, path.join(stackPath, "linked"));
+    if (!await createTestSymlink(outsideDirectory, path.join(stackPath, "linked"))) {
+        t.skip("Windows runner does not permit creating test symlinks");
+        return;
+    }
     const escapedSource = path.join(stackPath, "linked", "settings.json");
     const escapedMissing = await findMissingBindMounts({
         services: {
