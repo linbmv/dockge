@@ -7,6 +7,7 @@ import { R } from "redbean-node";
 import { verifyPassword } from "./password-hash";
 import fs from "fs";
 import { AgentManager } from "./agent-manager";
+import { MissingBindMountError } from "./bind-mount";
 
 export interface JWTDecoded {
     username : string;
@@ -37,6 +38,7 @@ export interface Arguments {
 export interface Config extends Arguments {
     dataDir : string;
     stacksDir : string;
+    projectsDir : string;
     defaultExternalNetwork : string;
     publishedHostIPVariable : string;
     publishedPortStart : number;
@@ -61,16 +63,24 @@ export function callbackError(error : unknown, callback : unknown) {
         return;
     }
 
-    if (error instanceof Error) {
+    if (error instanceof MissingBindMountError) {
         callback({
             ok: false,
+            type: "missingBindMounts",
             msg: error.message,
             msgi18n: true,
+            missingBindMounts: error.missingBindMounts,
         });
     } else if (error instanceof ValidationError) {
         callback({
             ok: false,
             type: ERROR_TYPE_VALIDATION,
+            msg: error.message,
+            msgi18n: true,
+        });
+    } else if (error instanceof Error) {
+        callback({
+            ok: false,
             msg: error.message,
             msgi18n: true,
         });

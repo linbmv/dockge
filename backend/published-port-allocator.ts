@@ -169,7 +169,7 @@ async function collectUsedPorts(server : DockgeServer, currentEditorPorts : unkn
 function requireHostIP(server : DockgeServer) : void {
     if (!server.getPublishedHostIPValue()) {
         throw new ValidationError(
-            `${server.config.publishedHostIPVariable} must be set to a valid IPv4 address in Dockge global.env.`
+            `${server.config.publishedHostIPVariable} must be set to a valid IPv4 address in Dockge Global Variables.`
         );
     }
 }

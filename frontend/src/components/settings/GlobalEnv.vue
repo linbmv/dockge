@@ -7,6 +7,7 @@
                         ref="editor"
                         v-model="settings.globalENV"
                         :extensions="extensionsEnv"
+                        :placeholder="$t('globalEnvEditorPlaceholder')"
                         minimal
                         wrap="true"
                         dark="true"

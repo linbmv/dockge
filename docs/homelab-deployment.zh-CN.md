@@ -7,7 +7,8 @@ Compose 管理器，同时维持以下网络合同：
 - 容器之间使用唯一的服务名或网络别名加内部端口；内部端口可以重复；
 - Tailnet 设备使用 `Docker宿主机的MagicDNS名称:唯一发布端口`；
 - 所有由分配器生成的发布端口只绑定宿主机的 Tailscale IPv4；
-- 默认不使用静态容器 IP，也不把 `D_Home` 整段子网发布到 Tailnet。
+- Dockge 在服务加入 `D_Home` 后自动分配未占用的固定内部 IP；不把 `D_Home`
+  整段子网发布到 Tailnet。
 
 当前这台主机是原位升级，不应照搬第 1 节的全新安装目录。实际接管步骤见
 第 10 节。
@@ -22,7 +23,8 @@ git clone https://github.com/linbmv/dockge.git /opt/dockge
 cd /opt/dockge
 ```
 
-创建共享网络。Dockge 只引用它，不会自动创建、删除或修改子网：
+设置 `DOCKGE_DEFAULT_EXTERNAL_NETWORK=D_Home` 后，Dockge 启动时会检查共享
+网络；不存在时自动创建，已存在时保持不变。也可以手工创建并检查：
 
 ```sh
 docker network create --driver bridge D_Home
@@ -106,6 +108,11 @@ Compose Stack 内调用时，可以直接使用服务名。
 `expose:` 只具有说明/元数据作用，既不会发布宿主机端口，也不是容器互通的
 前提。`D_Home` 上的容器默认可以直接访问对方监听的内部端口。
 
+服务保存或部署时，Dockge 会根据 `D_Home` 的实际 IPv4 子网，按
+`.100-.253`、再到 `.2-.99` 的顺序分配未占用地址，并把
+`ipv4_address` 写入 Compose；`.254` 保留。容器卡片会显示该内部 IP。已有
+`ipv4_address` 的服务保持不变。
+
 共享 PostgreSQL 也是可行的：让 PostgreSQL 加入 `D_Home`，为每个应用创建
 独立数据库和独立账号，再通过唯一 DNS 名称连接。它可以减少重复数据库实例，
 但也扩大故障影响范围，因此必须单独备份数据卷，并确认各应用支持相同的
@@ -118,7 +125,7 @@ Dockge 会从配置区间中选择第一个空闲端口，并写入类似配置�
 
 ```yaml
 ports:
-  - "${TS_HOST_IP:?Set TS_HOST_IP in Dockge global.env}:20001:8080"
+  - "${TS_HOST_IP:?Set TS_HOST_IP in Dockge Global Variables}:20001:8080"
 ```
 
 `${...:?错误信息}` 是故障关闭保护：如果 `TS_HOST_IP` 缺失或为空，Compose
@@ -151,14 +158,15 @@ Docker 的服务名解析由 Docker 内置 DNS 提供，只对加入相同 Docke
 容器有效。宿主机原生进程以及其他 Tailnet 设备不能直接把 Compose 服务名
 当作 DNS 名称使用。
 
-长期建议只有两种：
+宿主机原生程序可以直接使用固定内部 IP 加容器内部端口，例如
+`172.18.0.115:5000`，不需要发布端口。也可以使用以下两种方式：
 
 1. 宿主机原生程序使用 `宿主机MagicDNS名称:已发布端口`（或
    `TS_HOST_IP:已发布端口`）；
 2. 如果必须使用 `服务名:内部端口`，把该程序也容器化并加入 `D_Home`。
 
-不要依赖动态容器 IP。Linux 宿主机通常能够路由到 bridge 容器 IP，但地址会
-变化，也没有稳定的 Docker DNS 体验，不适合作为长期配置。
+同一个内部端口可以被多个容器重复使用，因为它们拥有不同的固定内部 IP；只有
+需要从宿主机或 Tailnet 通过宿主机地址访问时，才需要唯一的发布端口。
 
 ## 5. 为什么默认不使用 Tailscale subnet router
 
@@ -172,6 +180,46 @@ Tailnet 设备自动解析 Docker 服务名，还会把整个共享网络暴露�
 subnet routing 作为独立的高级运维项目启用；Dockge 不自动执行这些操作。
 
 ## 6. Git 拉取与本地构建
+
+“新建 Stack”页面先选择部署来源。镜像型或需要手工编排的 Stack 使用“镜像 /
+Compose”；本地源码项目使用“本地构建”。VPS 上已有源码时，输入服务器项目的
+绝对路径并点击“读取项目”；Dockge 会自动读取根目录中的标准 Compose 文件、
+`.env`，并用目录名填写 Stack 名称，确认编辑器内容后点击“创建并部署”即可。
+
+服务器路径必须由管理员显式开放。将项目父目录以相同绝对路径只读挂载进 Dockge，
+并设置允许的根目录：
+
+```yaml
+services:
+  dockge:
+    volumes:
+      - /root/data/docker:/root/data/docker:ro
+    environment:
+      - DOCKGE_PROJECTS_DIR=/root/data/docker
+```
+
+网页只能读取该根目录的子目录；相对路径、根目录本身、越界路径和通过符号链接
+跳出根目录的路径都会被拒绝。创建时项目会先复制到隐藏临时目录，再原子发布到
+Stacks 目录，因此原项目不会被 Dockge 修改。
+
+如果手工编辑的 Compose 使用相对构建上下文，例如 `build: .` 或
+`build.context: ./app`，目录选择也会自动出现。所选目录必须包含 Compose、
+Dockerfile 和全部源码。Dockge 会把普通文件分块上传到所选 Agent 的隐藏临时
+目录，完整接收后再原子发布为 Stack 目录；页面编辑器中的 Compose 和 `.env`
+是最终版本，会覆盖所选目录中的同名配置。单次导入上限为 5,000 个文件和
+100 MiB。
+
+“从当前电脑上传”仍作为备用方式。浏览器目录选择不保留符号链接和 POSIX
+可执行位；服务器路径导入会保留这些文件属性，但仍只能读取管理员挂载并通过
+`DOCKGE_PROJECTS_DIR` 开放的目录。
+
+每次由 Dockge 执行 `docker compose up` 前，Dockge 都会先解析最终 Compose
+配置并检查 bind mount 的宿主机源路径。源路径缺失时不会让 Docker 静默创建
+目录，而是在页面列出源路径、服务和容器目标路径，要求确认创建为“文件”或
+“目录”。扩展名和 `Dockerfile`、`Caddyfile` 等常见名称只用于默认选择，用户
+仍可切换；文件还可填写可选的初始内容。Dockge 只代建当前 Stack 目录内的
+相对路径，并拒绝覆盖已有对象或通过符号链接跳出 Stack。Stack 外的绝对路径
+必须由管理员在服务器上手动创建后再部署。
 
 Git 仓库必须以 Stack 目录为工作树根，例如：
 

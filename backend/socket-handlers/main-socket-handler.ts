@@ -247,7 +247,7 @@ export class MainSocketHandler extends SocketHandler {
                 if (fs.existsSync(path.join(server.stacksDir, "global.env"))) {
                     data.globalENV = fs.readFileSync(path.join(server.stacksDir, "global.env"), "utf-8");
                 } else {
-                    data.globalENV = "# VARIABLE=value #comment";
+                    data.globalENV = "";
                 }
 
                 callback({
@@ -279,7 +279,7 @@ export class MainSocketHandler extends SocketHandler {
                     await doubleCheckPassword(socket, currentPassword);
                 }
                 // Handle global.env
-                if (data.globalENV && data.globalENV != "# VARIABLE=value #comment") {
+                if (typeof data.globalENV === "string" && data.globalENV.trim() !== "") {
                     await fsAsync.writeFile(path.join(server.stacksDir, "global.env"), data.globalENV);
                 } else {
                     await fsAsync.rm(path.join(server.stacksDir, "global.env"), {

@@ -12,13 +12,18 @@ import {
     CREATED_STACK,
     EXITED, getCombinedTerminalName,
     getComposeTerminalName, getContainerExecTerminalName,
-    PROGRESS_TERMINAL_ROWS,
     RUNNING, TERMINAL_ROWS,
     UNKNOWN
 } from "../common/util-common";
 import { InteractiveTerminal, Terminal } from "./terminal";
 import childProcessAsync from "promisify-child-process";
 import { Settings } from "./settings";
+import { hasBuildServices } from "../common/compose-preset";
+import {
+    findMissingBindMounts,
+    MissingBindMountError,
+    prepareBindMountSources
+} from "./bind-mount";
 
 export class Stack {
 
@@ -202,23 +207,83 @@ export class Stack {
             }
         }
 
-        // Write or overwrite the compose.yaml
-        fs.writeFileSync(path.join(dir, this._composeFileName), this.composeYAML);
+        const composePath = path.join(dir, this._composeFileName);
+        await fsAsync.writeFile(composePath, this.composeYAML);
+
+        const envPath = path.join(dir, ".env");
+        if (await fileExists(envPath) || this.composeENV.trim() !== "") {
+            await fsAsync.writeFile(envPath, this.composeENV);
+        }
+
         if (process.env.PUID && process.env.PGID) {
             const uid = Number(process.env.PUID);
             const gid = Number(process.env.PGID);
             fs.lchownSync(dir, uid, gid);
-            fs.chownSync(path.join(dir, this._composeFileName), uid, gid);
+            fs.chownSync(composePath, uid, gid);
+            if (await fileExists(envPath)) {
+                fs.chownSync(envPath, uid, gid);
+            }
         }
     }
 
     async deploy(socket : DockgeSocket) : Promise<number> {
+        await this.requireBindMountSources();
         const terminalName = getComposeTerminalName(socket.endpoint, this.name);
-        let exitCode = await Terminal.exec(this.server, socket, terminalName, "docker", this.getComposeOptions("up", "-d", "--remove-orphans"), this.path);
+        const config = yaml.parse(this.composeYAML);
+        const deployOptions = [ "-d" ];
+        if (hasBuildServices(config)) {
+            deployOptions.push("--build");
+        }
+        deployOptions.push("--remove-orphans");
+        let exitCode = await Terminal.exec(this.server, socket, terminalName, "docker", this.getComposeOptions("up", ...deployOptions), this.path);
         if (exitCode !== 0) {
             throw new Error("Failed to deploy, please check the terminal output for more information.");
         }
         return exitCode;
+    }
+
+    async getMissingBindMounts() {
+        const result = await childProcessAsync.spawn(
+            "docker",
+            this.getComposeOptions("config", "--format", "json"),
+            {
+                cwd: this.path,
+                encoding: "utf-8",
+            }
+        );
+        if (!result.stdout) {
+            throw new Error("Docker Compose returned an empty configuration.");
+        }
+
+        let config: unknown;
+        try {
+            config = JSON.parse(result.stdout.toString());
+        } catch (error) {
+            throw new Error("Docker Compose returned an invalid JSON configuration.");
+        }
+
+        return findMissingBindMounts(config, this.fullPath);
+    }
+
+    async requireBindMountSources() {
+        const missingBindMounts = await this.getMissingBindMounts();
+        if (missingBindMounts.length > 0) {
+            throw new MissingBindMountError(missingBindMounts);
+        }
+    }
+
+    async prepareBindMountSources(preparations: unknown) {
+        const missingBindMounts = await this.getMissingBindMounts();
+        if (missingBindMounts.length === 0) {
+            return;
+        }
+
+        await prepareBindMountSources(this.fullPath, missingBindMounts, preparations);
+
+        const remaining = await this.getMissingBindMounts();
+        if (remaining.length > 0) {
+            throw new MissingBindMountError(remaining);
+        }
     }
 
     async delete(socket: DockgeSocket) : Promise<number> {
@@ -428,6 +493,7 @@ export class Stack {
     }
 
     async start(socket: DockgeSocket) {
+        await this.requireBindMountSources();
         const terminalName = getComposeTerminalName(socket.endpoint, this.name);
         let exitCode = await Terminal.exec(this.server, socket, terminalName, "docker", this.getComposeOptions("up", "-d", "--remove-orphans"), this.path);
         if (exitCode !== 0) {
@@ -464,6 +530,7 @@ export class Stack {
     }
 
     async update(socket: DockgeSocket) {
+        await this.requireBindMountSources();
         const terminalName = getComposeTerminalName(socket.endpoint, this.name);
         let exitCode = await Terminal.exec(this.server, socket, terminalName, "docker", this.getComposeOptions("pull"), this.path);
         if (exitCode !== 0) {
@@ -490,19 +557,43 @@ export class Stack {
         }
 
         const terminalName = getComposeTerminalName(socket.endpoint, this.name);
-        const scriptPath = path.join(process.cwd(), "extra", "git-pull-build.sh");
+        const gitExitCode = await Terminal.exec(
+            this.server,
+            socket,
+            terminalName,
+            "env",
+            [
+                "GIT_TERMINAL_PROMPT=0",
+                "GIT_SSH_COMMAND=ssh -o BatchMode=yes -o StrictHostKeyChecking=yes",
+                "SSH_ASKPASS=/bin/false",
+                "git",
+                "-c",
+                `safe.directory=${this.path}`,
+                "pull",
+                "--ff-only",
+            ],
+            this.path
+        );
+        if (gitExitCode !== 0) {
+            throw new Error("Git pull failed. Check the progress terminal for details.");
+        }
+
+        // Pull may introduce new bind mounts, so inspect the updated Compose
+        // configuration before Docker gets a chance to create missing paths.
+        await this.requireBindMountSources();
+
         const composeOptions = this.getComposeOptions("up", "-d", "--build", "--remove-orphans");
         const exitCode = await Terminal.exec(
             this.server,
             socket,
             terminalName,
-            "sh",
-            [ scriptPath, ...composeOptions ],
+            "docker",
+            composeOptions,
             this.path
         );
 
         if (exitCode !== 0) {
-            throw new Error("Git pull or local build failed. Check the progress terminal for details.");
+            throw new Error("Local build failed. Check the progress terminal for details.");
         }
 
         return exitCode;
@@ -577,6 +668,20 @@ export class Stack {
                 }
             }
 
+            const containerNames = Array.from(statusList.values())
+                .flat()
+                .map(status => (status as { name?: unknown }).name)
+                .filter((name): name is string => typeof name === "string" && name.length > 0);
+            const internalIPs = await this.getContainerInternalIPs(containerNames);
+            for (const serviceStatuses of statusList.values()) {
+                for (const serviceStatus of serviceStatuses) {
+                    const status = serviceStatus as { name?: unknown; internalIP?: string };
+                    if (typeof status.name === "string" && internalIPs.has(status.name)) {
+                        status.internalIP = internalIPs.get(status.name);
+                    }
+                }
+            }
+
             return statusList;
         } catch (e) {
             log.error("getServiceStatusList", e);
@@ -584,7 +689,53 @@ export class Stack {
         }
     }
 
+    private async getContainerInternalIPs(containerNames : string[]) : Promise<Map<string, string>> {
+        const result = new Map<string, string>();
+        if (containerNames.length === 0 || !this.server.config.defaultExternalNetwork) {
+            return result;
+        }
+
+        try {
+            const inspected = await childProcessAsync.spawn("docker", [ "container", "inspect", ...containerNames ], {
+                encoding: "utf-8",
+                maxBuffer: 10 * 1024 * 1024,
+            });
+            const containers = JSON.parse(inspected.stdout?.toString() || "[]") as unknown;
+            if (!Array.isArray(containers)) {
+                return result;
+            }
+
+            for (const container of containers) {
+                if (!container || typeof container !== "object") {
+                    continue;
+                }
+                const record = container as Record<string, unknown>;
+                const name = typeof record.Name === "string" ? record.Name.replace(/^\//, "") : "";
+                const networkSettings = record.NetworkSettings;
+                if (!name || !networkSettings || typeof networkSettings !== "object") {
+                    continue;
+                }
+                const networks = (networkSettings as Record<string, unknown>).Networks;
+                if (!networks || typeof networks !== "object") {
+                    continue;
+                }
+                const network = (networks as Record<string, unknown>)[this.server.config.defaultExternalNetwork];
+                if (!network || typeof network !== "object") {
+                    continue;
+                }
+                const address = (network as Record<string, unknown>).IPAddress;
+                if (typeof address === "string" && address.length > 0) {
+                    result.set(name, address);
+                }
+            }
+        } catch (e) {
+            log.warn("getServiceStatusList", `Cannot inspect container internal IPs: ${e instanceof Error ? e.message : String(e)}`);
+        }
+        return result;
+    }
+
     async startService(socket: DockgeSocket, serviceName: string) {
+        await this.requireBindMountSources();
         const terminalName = getComposeTerminalName(socket.endpoint, this.name);
         const exitCode = await Terminal.exec(this.server, socket, terminalName, "docker", [ "compose", "up", "-d", serviceName ], this.path);
         if (exitCode !== 0) {

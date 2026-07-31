@@ -35,6 +35,7 @@ import {
     faCopy,
     faCheck,
     faFile,
+    faFolder,
     faAward,
     faLink,
     faChevronDown,
@@ -88,6 +89,7 @@ library.add(
     faCopy,
     faCheck,
     faFile,
+    faFolder,
     faAward,
     faLink,
     faChevronDown,
@@ -118,4 +120,3 @@ library.add(
 );
 
 export { FontAwesomeIcon };
-

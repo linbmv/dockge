@@ -13,12 +13,12 @@
                 <div class="btn-group me-2" role="group">
                     <button v-if="isEditMode" class="btn btn-primary" :disabled="processing" @click="deployStack">
                         <font-awesome-icon icon="rocket" class="me-1" />
-                        {{ $t("deployStack") }}
+                        {{ isAdd ? $t("createAndDeployStack") : $t("deployStack") }}
                     </button>
 
                     <button v-if="isEditMode" class="btn btn-normal" :disabled="processing" @click="saveStack">
                         <font-awesome-icon icon="save" class="me-1" />
-                        {{ $t("saveStackDraft") }}
+                        {{ isAdd ? $t("saveStackDraftOnly") : $t("saveStackDraft") }}
                     </button>
 
                     <button v-if="!isEditMode" class="btn btn-secondary" :disabled="processing" @click="enableEditMode">
@@ -92,8 +92,37 @@
                     <div v-if="isAdd">
                         <h4 class="mb-3">{{ $t("general") }}</h4>
                         <div class="shadow-box big-padding mb-3">
-                            <!-- Stack Name -->
                             <div>
+                                <label class="form-label">{{ $t("deploymentSource") }}</label>
+                                <div class="source-selector" role="group" :aria-label="$t('deploymentSource')">
+                                    <button
+                                        type="button"
+                                        class="btn"
+                                        :class="creationSource === 'compose' ? 'btn-primary' : 'btn-normal'"
+                                        :aria-pressed="creationSource === 'compose'"
+                                        @click="selectCreationSource('compose')"
+                                    >
+                                        <font-awesome-icon icon="file" class="me-1" />
+                                        {{ $t("sourceComposeOrImage") }}
+                                    </button>
+                                    <button
+                                        type="button"
+                                        class="btn"
+                                        :class="creationSource === 'local' ? 'btn-primary' : 'btn-normal'"
+                                        :aria-pressed="creationSource === 'local'"
+                                        @click="selectCreationSource('local')"
+                                    >
+                                        <font-awesome-icon icon="wrench" class="me-1" />
+                                        {{ $t("sourceLocalBuild") }}
+                                    </button>
+                                </div>
+                                <div class="form-text">
+                                    {{ $t(creationSource === "local" ? "sourceLocalBuildHelp" : "sourceComposeOrImageHelp") }}
+                                </div>
+                            </div>
+
+                            <!-- Stack Name -->
+                            <div class="mt-3">
                                 <label for="name" class="form-label">{{ $t("stackName") }}</label>
                                 <input id="name" v-model="stack.name" type="text" class="form-control" required @blur="stackNameToLowercase">
                                 <div class="form-text">{{ $t("Lowercase only") }}</div>
@@ -102,11 +131,98 @@
                             <!-- Endpoint -->
                             <div class="mt-3">
                                 <label for="name" class="form-label">{{ $t("dockgeAgent") }}</label>
-                                <select v-model="stack.endpoint" class="form-select">
+                                <select v-model="stack.endpoint" class="form-select" @change="changeEndpoint">
                                     <option v-for="(agent, agentEndpoint) in $root.agentList" :key="agentEndpoint" :value="agentEndpoint" :disabled="$root.agentStatusList[agentEndpoint] != 'online'">
                                         ({{ $root.agentStatusList[agentEndpoint] }}) {{ (agent.name !== '') ? agent.name : agent.url || $t("Current") }}
                                     </option>
                                 </select>
+                            </div>
+
+                            <div v-if="creationSource === 'local' || relativeBuildContexts.length > 0" class="mt-3">
+                                <label class="form-label">{{ $t("localProjectSource") }}</label>
+                                <div class="source-selector project-source-selector" role="group" :aria-label="$t('localProjectSource')">
+                                    <button
+                                        type="button"
+                                        class="btn"
+                                        :class="localProjectSource === 'server' ? 'btn-primary' : 'btn-normal'"
+                                        :aria-pressed="localProjectSource === 'server'"
+                                        :disabled="!stackDefaults.projectsDir"
+                                        @click="selectLocalProjectSource('server')"
+                                    >
+                                        <font-awesome-icon icon="warehouse" class="me-1" />
+                                        {{ $t("serverProjectPath") }}
+                                    </button>
+                                    <button
+                                        type="button"
+                                        class="btn"
+                                        :class="localProjectSource === 'upload' ? 'btn-primary' : 'btn-normal'"
+                                        :aria-pressed="localProjectSource === 'upload'"
+                                        @click="selectLocalProjectSource('upload')"
+                                    >
+                                        <font-awesome-icon icon="upload" class="me-1" />
+                                        {{ $t("uploadProjectFolder") }}
+                                    </button>
+                                </div>
+
+                                <div v-if="localProjectSource === 'server'" class="mt-3">
+                                    <label for="server-project-path" class="form-label">{{ $t("serverProjectPath") }}</label>
+                                    <div class="input-group project-path-input">
+                                        <input
+                                            id="server-project-path"
+                                            v-model="serverProjectPath"
+                                            type="text"
+                                            class="form-control"
+                                            :placeholder="stackDefaults.projectsDir ? stackDefaults.projectsDir + '/my-project' : '/root/data/docker/my-project'"
+                                            @input="serverProjectReady = false"
+                                            @keyup.enter="inspectServerProject"
+                                        >
+                                        <button
+                                            type="button"
+                                            class="btn btn-primary"
+                                            :disabled="serverProjectLoading || !serverProjectPath.trim()"
+                                            @click="inspectServerProject"
+                                        >
+                                            <span v-if="serverProjectLoading" class="spinner-border spinner-border-sm me-1"></span>
+                                            <font-awesome-icon v-else icon="search" class="me-1" />
+                                            {{ $t("loadServerProject") }}
+                                        </button>
+                                    </div>
+                                    <div class="form-text">
+                                        {{ stackDefaults.projectsDir
+                                            ? $t("serverProjectPathHelp", [ stackDefaults.projectsDir ])
+                                            : $t("serverProjectImportDisabled") }}
+                                    </div>
+                                    <div v-if="serverProjectReady" class="form-text text-success">
+                                        {{ $t("serverProjectLoaded", [ projectComposeFileName ]) }}
+                                    </div>
+                                </div>
+
+                                <div v-else class="mt-3">
+                                    <label for="stack-project-folder" class="form-label">{{ $t("localProjectFolder") }}</label>
+                                    <input
+                                        id="stack-project-folder"
+                                        ref="stackProjectFolder"
+                                        type="file"
+                                        class="form-control"
+                                        webkitdirectory
+                                        multiple
+                                        @change="selectBuildContext"
+                                    >
+                                    <div class="form-text">
+                                        {{ creationSource === "local"
+                                            ? $t("localProjectFolderImportHelp")
+                                            : $t("localProjectFolderHelp", [ relativeBuildContexts.join(", ") ]) }}
+                                    </div>
+                                    <div v-if="buildContextFiles.length > 0" class="form-text build-context-status">
+                                        <span>
+                                            {{ $t("localProjectFolderSelected", [ buildContextFiles.length, formatFileSize(buildContextTotalBytes) ]) }}
+                                            <template v-if="projectComposeFileName">
+                                                · {{ projectComposeFileName }}
+                                            </template>
+                                        </span>
+                                        <progress v-if="uploadProgress > 0" :value="uploadProgress" max="100"></progress>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -184,6 +300,7 @@
                             ref="editor"
                             v-model="stack.composeYAML"
                             :extensions="extensions"
+                            :placeholder="$t('composeEditorPlaceholder')"
                             minimal
                             wrap="true"
                             dark="true"
@@ -205,6 +322,7 @@
                                 ref="editor"
                                 v-model="stack.composeENV"
                                 :extensions="extensionsEnv"
+                                :placeholder="$t('envEditorPlaceholder')"
                                 minimal
                                 wrap="true"
                                 dark="true"
@@ -254,6 +372,9 @@
                                         <code>{{ entry.serviceName }}</code> — {{ entry.original }}
                                     </li>
                                 </ul>
+                                <div v-else-if="serviceNames.length === 0" class="form-text mt-2">
+                                    {{ $t("pinPortsToTailnetEmpty") }}
+                                </div>
                                 <div v-else class="form-text mt-2">{{ $t("pinPortsToTailnetDone") }}</div>
 
                                 <ul v-if="portPreset.skipped.length > 0" class="preset-list mt-2 text-warning">
@@ -296,6 +417,95 @@
                 {{ $t("stackNotManagedByDockgeMsg") }}
             </div>
 
+            <BModal
+                v-model="showBindMountSetupDialog"
+                :title="$t('bindMountSetupTitle')"
+                size="lg"
+                hide-footer
+                no-close-on-backdrop
+                :no-close-on-esc="bindMountSetupProcessing"
+                @hidden="clearBindMountSetup"
+            >
+                <p class="mb-3">
+                    {{ $t("bindMountSetupIntro") }}
+                </p>
+
+                <div
+                    v-for="mount in bindMountSetupItems"
+                    :key="mount.source"
+                    class="bind-mount-setup-item"
+                >
+                    <div class="bind-mount-source-label">{{ $t("bindMountSource") }}</div>
+                    <code class="bind-mount-source">{{ mount.displaySource }}</code>
+                    <div class="bind-mount-uses">
+                        <span v-for="use in mount.uses" :key="`${use.service}:${use.target}`">
+                            {{ use.service }} &rarr; <code>{{ use.target }}</code>
+                        </span>
+                    </div>
+
+                    <div v-if="!mount.canCreate" class="alert alert-warning mt-3 mb-0">
+                        {{ $t("bindMountOutsideStack") }}
+                    </div>
+
+                    <template v-else>
+                        <div class="btn-group bind-mount-type-selector mt-3" role="group" :aria-label="$t('bindMountSourceType')">
+                            <button
+                                type="button"
+                                class="btn"
+                                :class="mount.type === 'file' ? 'btn-primary' : 'btn-normal'"
+                                :aria-pressed="mount.type === 'file'"
+                                :disabled="bindMountSetupProcessing"
+                                @click="mount.type = 'file'"
+                            >
+                                <font-awesome-icon icon="file" class="me-1" />
+                                {{ $t("bindMountCreateFile") }}
+                            </button>
+                            <button
+                                type="button"
+                                class="btn"
+                                :class="mount.type === 'directory' ? 'btn-primary' : 'btn-normal'"
+                                :aria-pressed="mount.type === 'directory'"
+                                :disabled="bindMountSetupProcessing"
+                                @click="mount.type = 'directory'"
+                            >
+                                <font-awesome-icon icon="folder" class="me-1" />
+                                {{ $t("bindMountCreateDirectory") }}
+                            </button>
+                        </div>
+
+                        <div v-if="mount.type === 'file'" class="mt-3">
+                            <label :for="`bind-mount-content-${mount.id}`" class="form-label">
+                                {{ $t("bindMountInitialContent") }}
+                            </label>
+                            <textarea
+                                :id="`bind-mount-content-${mount.id}`"
+                                v-model="mount.content"
+                                class="form-control bind-mount-content"
+                                rows="4"
+                                :placeholder="$t('bindMountInitialContentPlaceholder')"
+                                :disabled="bindMountSetupProcessing"
+                            ></textarea>
+                        </div>
+                    </template>
+                </div>
+
+                <div class="modal-footer bind-mount-dialog-actions px-0 pb-0">
+                    <button type="button" class="btn btn-normal" :disabled="bindMountSetupProcessing" @click="showBindMountSetupDialog = false">
+                        {{ $t("cancel") }}
+                    </button>
+                    <button
+                        type="button"
+                        class="btn btn-primary"
+                        :disabled="!canPrepareBindMounts || bindMountSetupProcessing"
+                        @click="prepareBindMountsAndRetry"
+                    >
+                        <font-awesome-icon v-if="bindMountSetupProcessing" icon="spinner" spin class="me-1" />
+                        <font-awesome-icon v-else icon="play" class="me-1" />
+                        {{ $t("bindMountPrepareAndRetry") }}
+                    </button>
+                </div>
+            </BModal>
+
             <!-- Delete Dialog -->
             <BModal v-model="showDeleteDialog" :cancelTitle="$t('cancel')" :okTitle="$t('deleteStack')" okVariant="danger" @ok="deleteDialog">
                 {{ $t("deleteStackMsg") }}
@@ -330,27 +540,19 @@ import { resolveRequiredEnvironmentVariable } from "../../../common/published-po
 import {
     applyDefaultExternalNetworkToDoc,
     applyPortRewritesToDoc,
+    getRelativeBuildContexts,
     planDefaultExternalNetwork,
     planPortPreset
 } from "../../../common/compose-preset";
-
-const template = `
-services:
-  nginx:
-    image: nginx:latest
-    restart: unless-stopped
-    ports:
-      - "8080:80"
-`;
-const homelabTemplate = `
-services:
-  nginx:
-    image: nginx:latest
-    restart: unless-stopped
-    expose:
-      - "80"
-`;
-const envDefault = "# VARIABLE=value #comment";
+import { applyInternalIPAllocations } from "../../../common/internal-ip";
+import {
+    findProjectComposeFile,
+    removeDirectoryUploadRoot,
+    STACK_UPLOAD_CHUNK_MAX_BYTES,
+    STACK_UPLOAD_MAX_BYTES,
+    STACK_UPLOAD_MAX_FILES,
+    stackNameFromProjectRoot
+} from "../../../common/stack-file-upload";
 
 let yamlErrorTimeout = null;
 
@@ -416,16 +618,34 @@ export default {
                 publishedHostIPValue: "",
                 publishedPortStart: 20000,
                 publishedPortEnd: 39999,
+                internalIPNetwork: "",
+                internalIPSubnet: "",
+                internalIPPrefix: "",
+                projectsDir: "",
             },
             serviceStatusList: {},
             dockerStats: {},
             isEditMode: false,
             submitted: false,
             showDeleteDialog: false,
+            showBindMountSetupDialog: false,
+            bindMountSetupProcessing: false,
+            bindMountSetupItems: [],
+            pendingBindMountRetry: null,
             newContainerName: "",
             stopServiceStatusTimeout: false,
             stopDockerStatsTimeout: false,
             allocatingPorts: false,
+            creationSource: "compose",
+            localProjectSource: "server",
+            serverProjectPath: "",
+            serverProjectLoadedPath: "",
+            serverProjectLoading: false,
+            serverProjectReady: false,
+            buildContextFiles: [],
+            buildContextTotalBytes: 0,
+            projectComposeFileName: "",
+            uploadProgress: 0,
         };
     },
     computed: {
@@ -471,6 +691,17 @@ export default {
             return Object.keys(this.jsonConfig.services);
         },
 
+        relativeBuildContexts() {
+            return getRelativeBuildContexts(this.jsonConfig);
+        },
+
+        localProjectReady() {
+            if (this.localProjectSource === "server") {
+                return this.serverProjectReady;
+            }
+            return this.buildContextFiles.length > 0;
+        },
+
         /**
          * Which `ports:` entries the Tailnet preset can pin, and which it will
          * leave alone. Recomputed from the editor content, so it always
@@ -498,6 +729,12 @@ export default {
 
         active() {
             return this.status === RUNNING;
+        },
+
+        canPrepareBindMounts() {
+            return this.bindMountSetupItems.length > 0 && this.bindMountSetupItems.every(mount => (
+                mount.canCreate && (mount.type === "file" || mount.type === "directory")
+            ));
         },
 
         terminalName() {
@@ -588,13 +825,13 @@ export default {
                 composeYAML = this.$root.composeTemplate;
                 this.$root.composeTemplate = "";
             } else {
-                composeYAML = this.stackDefaults.defaultExternalNetwork ? homelabTemplate : template;
+                composeYAML = "";
             }
             if (this.$root.envTemplate) {
                 composeENV = this.$root.envTemplate;
                 this.$root.envTemplate = "";
             } else {
-                composeENV = envDefault;
+                composeENV = "";
             }
 
             // Default Values
@@ -604,14 +841,14 @@ export default {
                 composeENV,
                 isManagedByDockge: true,
                 endpoint: "",
+                composeFileName: "compose.yaml",
             };
 
-            this.yamlCodeChange();
-            // Only seeds the starter template; pasted content is left untouched
-            // until the user applies the preset explicitly.
-            this.applyPresetToDocument(
-                doc => applyDefaultExternalNetworkToDoc(doc, this.stackDefaults.defaultExternalNetwork)
-            );
+            this.localProjectSource = this.stackDefaults.projectsDir ? "server" : "upload";
+
+            if (composeYAML) {
+                this.yamlCodeChange();
+            }
 
         } else {
             this.stack.name = this.$route.params.stackName;
@@ -625,6 +862,314 @@ export default {
 
     },
     methods: {
+        selectCreationSource(source) {
+            this.creationSource = source;
+            if (source === "compose") {
+                this.clearBuildContext();
+                this.clearServerProject();
+            } else {
+                this.localProjectSource = this.stackDefaults.projectsDir ? "server" : "upload";
+            }
+        },
+
+        selectLocalProjectSource(source) {
+            if (source === "server" && !this.stackDefaults.projectsDir) {
+                this.$root.toastError(this.$t("serverProjectImportDisabled"));
+                return;
+            }
+            this.localProjectSource = source;
+            if (source === "server") {
+                this.clearBuildContext();
+            } else {
+                this.clearServerProject();
+            }
+        },
+
+        async changeEndpoint() {
+            this.clearBuildContext();
+            this.clearServerProject();
+            this.stackDefaults = await this.getStackDefaults();
+            this.localProjectSource = this.stackDefaults.projectsDir ? "server" : "upload";
+        },
+
+        async inspectServerProject() {
+            if (!this.serverProjectPath.trim()) {
+                this.$root.toastError(this.$t("serverProjectPathRequired"));
+                return;
+            }
+
+            this.serverProjectLoading = true;
+            this.serverProjectReady = false;
+            try {
+                const res = await this.emitAgentRequest("inspectServerProject", this.serverProjectPath.trim());
+                const project = res.project;
+                this.yamlToJSON(project.composeYAML);
+
+                this.clearBuildContext();
+                this.serverProjectPath = project.projectPath;
+                this.serverProjectLoadedPath = project.projectPath;
+                this.serverProjectReady = true;
+                this.projectComposeFileName = project.composeFileName;
+                this.stack.composeFileName = project.composeFileName;
+                this.stack.composeYAML = project.composeYAML;
+                this.stack.composeENV = project.composeENV;
+                if (!this.stack.name) {
+                    this.stack.name = project.suggestedStackName;
+                }
+                this.yamlCodeChange();
+            } catch (error) {
+                this.handleStackSubmitError(error);
+            } finally {
+                this.serverProjectLoading = false;
+                this.processing = false;
+            }
+        },
+
+        clearServerProject() {
+            this.serverProjectPath = "";
+            this.serverProjectLoadedPath = "";
+            this.serverProjectReady = false;
+            this.serverProjectLoading = false;
+            this.projectComposeFileName = "";
+        },
+
+        async selectBuildContext(event) {
+            const selectedFiles = Array.from(event.target.files ?? []);
+            const entries = selectedFiles.map(file => ({
+                file,
+                relativePath: removeDirectoryUploadRoot(file.webkitRelativePath || file.name),
+            }));
+            const rootNames = new Set(selectedFiles.map(file => (
+                (file.webkitRelativePath || file.name).split("/")[0]
+            )));
+            const totalBytes = selectedFiles.reduce((total, file) => total + file.size, 0);
+
+            if (rootNames.size !== 1 || entries.some(entry => entry.relativePath.length === 0)) {
+                this.clearBuildContext();
+                this.$root.toastError(this.$t("localProjectFolderInvalid"));
+                return;
+            }
+            if (entries.length > STACK_UPLOAD_MAX_FILES) {
+                this.clearBuildContext();
+                this.$root.toastError(this.$t("localProjectFolderTooManyFiles", [ STACK_UPLOAD_MAX_FILES ]));
+                return;
+            }
+            if (totalBytes > STACK_UPLOAD_MAX_BYTES) {
+                this.clearBuildContext();
+                this.$root.toastError(this.$t("localProjectFolderTooLarge"));
+                return;
+            }
+
+            this.buildContextFiles = entries;
+            this.buildContextTotalBytes = totalBytes;
+            this.projectComposeFileName = "";
+            this.uploadProgress = 0;
+
+            const envEntry = entries.find(entry => entry.relativePath === ".env");
+            if (this.creationSource === "local") {
+                const composeFileName = findProjectComposeFile(entries.map(entry => entry.relativePath));
+                const composeEntry = entries.find(entry => entry.relativePath === composeFileName);
+                if (!composeEntry) {
+                    this.clearBuildContext();
+                    this.$root.toastError(this.$t("localProjectComposeMissing"));
+                    return;
+                }
+
+                const composeYAML = await composeEntry.file.text();
+                try {
+                    this.yamlToJSON(composeYAML);
+                } catch (error) {
+                    this.clearBuildContext();
+                    this.$root.toastError(this.$t("localProjectComposeInvalid", [ error.message || String(error) ]));
+                    return;
+                }
+
+                this.stack.composeYAML = composeYAML;
+                this.projectComposeFileName = composeFileName;
+                if (!this.stack.name) {
+                    this.stack.name = stackNameFromProjectRoot(Array.from(rootNames)[0]);
+                }
+                if (envEntry) {
+                    this.stack.composeENV = await envEntry.file.text();
+                }
+                this.yamlCodeChange();
+                return;
+            }
+
+            if (envEntry && !this.stack.composeENV) {
+                this.stack.composeENV = await envEntry.file.text();
+            }
+        },
+
+        clearBuildContext() {
+            this.buildContextFiles = [];
+            this.buildContextTotalBytes = 0;
+            this.projectComposeFileName = "";
+            this.uploadProgress = 0;
+            if (this.$refs.stackProjectFolder) {
+                this.$refs.stackProjectFolder.value = "";
+            }
+        },
+
+        formatFileSize(bytes) {
+            if (bytes < 1024) {
+                return `${bytes} B`;
+            }
+            if (bytes < 1024 * 1024) {
+                return `${(bytes / 1024).toFixed(1)} KiB`;
+            }
+            return `${(bytes / (1024 * 1024)).toFixed(1)} MiB`;
+        },
+
+        emitAgentRequest(eventName, ...args) {
+            return new Promise((resolve, reject) => {
+                this.$root.emitAgent(this.stack.endpoint, eventName, ...args, (res) => {
+                    if (res?.ok) {
+                        resolve(res);
+                    } else {
+                        const error = new Error(res?.msg || "Project upload failed");
+                        error.response = res;
+                        reject(error);
+                    }
+                });
+            });
+        },
+
+        async uploadBuildContext(deploy) {
+            let uploadID;
+            let uploadedBytes = 0;
+            try {
+                const beginResult = await this.emitAgentRequest("beginStackFileUpload", this.stack.name);
+                uploadID = beginResult.uploadID;
+
+                for (const entry of this.buildContextFiles) {
+                    if (entry.file.size === 0) {
+                        await this.emitAgentRequest("uploadStackFileChunk", uploadID, entry.relativePath, 0, new ArrayBuffer(0));
+                        continue;
+                    }
+
+                    for (let offset = 0; offset < entry.file.size; offset += STACK_UPLOAD_CHUNK_MAX_BYTES) {
+                        const chunk = await entry.file.slice(offset, offset + STACK_UPLOAD_CHUNK_MAX_BYTES).arrayBuffer();
+                        await this.emitAgentRequest("uploadStackFileChunk", uploadID, entry.relativePath, offset, chunk);
+                        uploadedBytes += chunk.byteLength;
+                        this.uploadProgress = Math.round((uploadedBytes / this.buildContextTotalBytes) * 100);
+                    }
+                }
+
+                return await this.emitAgentRequest(
+                    "finishStackFileUpload",
+                    uploadID,
+                    this.stack.composeYAML,
+                    this.stack.composeENV,
+                    deploy
+                );
+            } catch (error) {
+                if (uploadID) {
+                    try {
+                        await this.emitAgentRequest("cancelStackFileUpload", uploadID);
+                    } catch (cancelError) {
+                        // The backend removes the upload session before deployment starts.
+                    }
+                }
+                throw error;
+            }
+        },
+
+        importServerProject(deploy) {
+            return this.emitAgentRequest(
+                "importServerProject",
+                this.stack.name,
+                this.serverProjectLoadedPath,
+                this.stack.composeYAML,
+                this.stack.composeENV,
+                deploy
+            );
+        },
+
+        handleStackSubmitResponse(res) {
+            this.processing = false;
+            this.$root.toastRes(res);
+            if (res.ok) {
+                this.isEditMode = false;
+                this.$router.push(this.url);
+            }
+        },
+
+        handleStackSubmitError(error, retry = null) {
+            if (retry && this.showBindMountSetup(error.response, retry)) {
+                return;
+            }
+
+            this.processing = false;
+            if (error.response) {
+                this.$root.toastRes(error.response);
+            } else {
+                this.$root.toastError(error.message || String(error));
+            }
+        },
+
+        showBindMountSetup(response, retry) {
+            if (response?.type !== "missingBindMounts" || !Array.isArray(response.missingBindMounts)) {
+                return false;
+            }
+
+            this.processing = false;
+            this.bindMountSetupItems = response.missingBindMounts.map((mount, index) => ({
+                ...mount,
+                id: index,
+                type: mount.suggestedType,
+                content: "",
+            }));
+            this.pendingBindMountRetry = retry;
+            this.showBindMountSetupDialog = true;
+            return true;
+        },
+
+        clearBindMountSetup() {
+            this.bindMountSetupItems = [];
+            this.pendingBindMountRetry = null;
+        },
+
+        async prepareBindMountsAndRetry() {
+            if (!this.canPrepareBindMounts || !this.pendingBindMountRetry) {
+                return;
+            }
+
+            this.bindMountSetupProcessing = true;
+            const retry = this.pendingBindMountRetry;
+            const preparations = this.bindMountSetupItems.map(mount => ({
+                source: mount.source,
+                type: mount.type,
+                content: mount.type === "file" ? mount.content : undefined,
+            }));
+
+            try {
+                await this.emitAgentRequest("prepareStackBindMounts", this.stack.name, preparations);
+                this.showBindMountSetupDialog = false;
+                await retry();
+            } catch (error) {
+                this.handleStackSubmitError(error, retry);
+            } finally {
+                this.bindMountSetupProcessing = false;
+            }
+        },
+
+        async deploySavedStack() {
+            this.processing = true;
+            try {
+                const res = await this.emitAgentRequest(
+                    "deployStack",
+                    this.stack.name,
+                    this.stack.composeYAML,
+                    this.stack.composeENV,
+                    false
+                );
+                this.handleStackSubmitResponse(res);
+            } catch (error) {
+                this.handleStackSubmitError(error, () => this.deploySavedStack());
+            }
+        },
+
         getStackDefaults() {
             return new Promise((resolve) => {
                 this.$root.emitAgent(this.endpoint, "getStackDefaults", (res) => {
@@ -640,6 +1185,10 @@ export default {
                             publishedHostIPValue: "",
                             publishedPortStart: 20000,
                             publishedPortEnd: 39999,
+                            internalIPNetwork: "",
+                            internalIPSubnet: "",
+                            internalIPPrefix: "",
+                            projectsDir: "",
                         });
                     }
                 });
@@ -697,13 +1246,49 @@ export default {
             return changed;
         },
 
-        applyNetworkPreset() {
+        async applyNetworkPreset() {
             const attached = this.applyPresetToDocument(
                 doc => applyDefaultExternalNetworkToDoc(doc, this.stackDefaults.defaultExternalNetwork)
             );
             if (attached > 0) {
                 this.$root.toastSuccess(this.$t("networkPresetApplied", [ attached ]));
+                await this.allocateInternalIPs();
             }
+        },
+
+        allocateInternalIPs() {
+            const networkName = this.stackDefaults.internalIPNetwork || this.stackDefaults.defaultExternalNetwork;
+            if (!networkName) {
+                return Promise.resolve(true);
+            }
+
+            return new Promise((resolve) => {
+                this.$root.emitAgent(
+                    this.endpoint,
+                    "allocateInternalIPs",
+                    [ this.jsonConfig, this.envsubstJSONConfig ],
+                    async (res) => {
+                        if (!res?.ok || !Array.isArray(res.allocations)) {
+                            if (res) {
+                                this.$root.toastRes(res);
+                            }
+                            resolve(false);
+                            return;
+                        }
+
+                        const changed = applyInternalIPAllocations(
+                            this.jsonConfig,
+                            networkName,
+                            res.allocations
+                        );
+                        if (changed > 0) {
+                            await this.$nextTick();
+                            this.$root.toastSuccess(this.$t("internalIPAllocated", [ changed ]));
+                        }
+                        resolve(true);
+                    }
+                );
+            });
         },
 
         collectCurrentEditorPorts() {
@@ -846,10 +1431,10 @@ export default {
             });
         },
 
-        deployStack() {
+        async deployStack() {
             this.processing = true;
 
-            if (!this.jsonConfig.services) {
+            if (!this.jsonConfig.services || Object.keys(this.jsonConfig.services).length === 0) {
                 this.$root.toastError("No services found in compose.yaml");
                 this.processing = false;
                 return;
@@ -878,28 +1463,87 @@ export default {
 
             this.bindTerminal();
 
-            this.$root.emitAgent(this.stack.endpoint, "deployStack", this.stack.name, this.stack.composeYAML, this.stack.composeENV, this.isAdd, (res) => {
+            if (!await this.allocateInternalIPs()) {
                 this.processing = false;
-                this.$root.toastRes(res);
+                return;
+            }
 
-                if (res.ok) {
-                    this.isEditMode = false;
-                    this.$router.push(this.url);
+            if (this.isAdd && (this.creationSource === "local" || this.relativeBuildContexts.length > 0) && !this.localProjectReady) {
+                this.$root.toastError(this.$t(this.localProjectSource === "server" ? "serverProjectPathRequired" : "localProjectFolderRequired"));
+                this.processing = false;
+                return;
+            }
+
+            if (this.isAdd && this.localProjectSource === "server" && this.serverProjectReady) {
+                try {
+                    const res = await this.importServerProject(true);
+                    this.handleStackSubmitResponse(res);
+                } catch (error) {
+                    this.handleStackSubmitError(error, () => this.deploySavedStack());
                 }
-            });
+                return;
+            }
+
+            if (this.isAdd && this.buildContextFiles.length > 0) {
+                try {
+                    const res = await this.uploadBuildContext(true);
+                    this.handleStackSubmitResponse(res);
+                } catch (error) {
+                    this.handleStackSubmitError(error, () => this.deploySavedStack());
+                }
+                return;
+            }
+
+            try {
+                const res = await this.emitAgentRequest(
+                    "deployStack",
+                    this.stack.name,
+                    this.stack.composeYAML,
+                    this.stack.composeENV,
+                    this.isAdd
+                );
+                this.handleStackSubmitResponse(res);
+            } catch (error) {
+                this.handleStackSubmitError(error, () => this.deploySavedStack());
+            }
         },
 
-        saveStack() {
+        async saveStack() {
             this.processing = true;
 
-            this.$root.emitAgent(this.stack.endpoint, "saveStack", this.stack.name, this.stack.composeYAML, this.stack.composeENV, this.isAdd, (res) => {
+            if (this.isAdd && (this.creationSource === "local" || this.relativeBuildContexts.length > 0) && !this.localProjectReady) {
+                this.$root.toastError(this.$t(this.localProjectSource === "server" ? "serverProjectPathRequired" : "localProjectFolderRequired"));
                 this.processing = false;
-                this.$root.toastRes(res);
+                return;
+            }
 
-                if (res.ok) {
-                    this.isEditMode = false;
-                    this.$router.push(this.url);
+            if (!await this.allocateInternalIPs()) {
+                this.processing = false;
+                return;
+            }
+
+            if (this.isAdd && this.localProjectSource === "server" && this.serverProjectReady) {
+                try {
+                    const res = await this.importServerProject(false);
+                    this.handleStackSubmitResponse(res);
+                } catch (error) {
+                    this.handleStackSubmitError(error);
                 }
+                return;
+            }
+
+            if (this.isAdd && this.buildContextFiles.length > 0) {
+                try {
+                    const res = await this.uploadBuildContext(false);
+                    this.handleStackSubmitResponse(res);
+                } catch (error) {
+                    this.handleStackSubmitError(error);
+                }
+                return;
+            }
+
+            this.$root.emitAgent(this.stack.endpoint, "saveStack", this.stack.name, this.stack.composeYAML, this.stack.composeENV, this.isAdd, (res) => {
+                this.handleStackSubmitResponse(res);
             });
         },
 
@@ -907,6 +1551,9 @@ export default {
             this.processing = true;
 
             this.$root.emitAgent(this.endpoint, "startStack", this.stack.name, (res) => {
+                if (this.showBindMountSetup(res, () => this.startStack())) {
+                    return;
+                }
                 this.processing = false;
                 this.$root.toastRes(res);
             });
@@ -943,6 +1590,9 @@ export default {
             this.processing = true;
 
             this.$root.emitAgent(this.endpoint, "updateStack", this.stack.name, (res) => {
+                if (this.showBindMountSetup(res, () => this.updateStack())) {
+                    return;
+                }
                 this.processing = false;
                 this.$root.toastRes(res);
             });
@@ -952,6 +1602,9 @@ export default {
             this.processing = true;
 
             this.$root.emitAgent(this.endpoint, "gitPullAndBuildStack", this.stack.name, (res) => {
+                if (this.showBindMountSetup(res, () => this.gitPullAndBuildStack())) {
+                    return;
+                }
                 this.processing = false;
                 this.$root.toastRes(res);
             });
@@ -1043,7 +1696,7 @@ export default {
 
         },
 
-        addContainer() {
+        async addContainer() {
             this.checkYAML();
 
             if (this.jsonConfig.services[this.newContainerName]) {
@@ -1062,6 +1715,7 @@ export default {
             this.ensureDefaultExternalNetworkForService(newService);
             this.jsonConfig.services[this.newContainerName] = newService;
             this.newContainerName = "";
+            await this.allocateInternalIPs();
             let element = this.$refs.containerList.lastElementChild;
             element.scrollIntoView({
                 block: "start",
@@ -1077,6 +1731,9 @@ export default {
             this.processing = true;
 
             this.$root.emitAgent(this.endpoint, "startService", this.stack.name, serviceName, (res) => {
+                if (this.showBindMountSetup(res, () => this.startService(serviceName))) {
+                    return;
+                }
                 this.processing = false;
                 this.$root.toastRes(res);
 
@@ -1263,6 +1920,41 @@ h4 {
     margin-top: var(--space-2);
 }
 
+.build-context-status {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-3);
+
+    progress {
+        width: min(180px, 45%);
+        height: 8px;
+    }
+}
+
+.source-selector {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--space-2);
+
+    .btn {
+        min-width: 0;
+        white-space: normal;
+    }
+}
+
+.project-source-selector {
+    margin-top: 0;
+}
+
+.project-path-input {
+    flex-wrap: nowrap;
+
+    .btn {
+        white-space: nowrap;
+    }
+}
+
 // Input group
 .input-group {
     display: flex;
@@ -1364,6 +2056,63 @@ h4 {
     background: $surface-elevated;
     border-radius: var(--radius-pill);
     margin-left: var(--space-3);
+}
+
+.bind-mount-setup-item {
+    padding: var(--space-4) 0;
+    border-top: 1px solid $border-subtle;
+
+    &:first-of-type {
+        border-top: 0;
+        padding-top: 0;
+    }
+}
+
+.bind-mount-source-label {
+    color: $text-muted;
+    font-size: var(--text-xs);
+    margin-bottom: var(--space-1);
+}
+
+.bind-mount-source {
+    display: block;
+    overflow-wrap: anywhere;
+    color: $text-primary;
+}
+
+.bind-mount-uses {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+    margin-top: var(--space-2);
+    color: $text-muted;
+    font-size: var(--text-sm);
+
+    code {
+        overflow-wrap: anywhere;
+    }
+}
+
+.bind-mount-type-selector {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    width: min(100%, 360px);
+
+    .btn {
+        min-width: 0;
+    }
+}
+
+.bind-mount-content {
+    resize: vertical;
+    min-height: 96px;
+    font-family: var(--font-mono);
+}
+
+.bind-mount-dialog-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: var(--space-2);
 }
 
 // Button group

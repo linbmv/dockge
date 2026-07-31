@@ -39,6 +39,7 @@ import { ManageAgentSocketHandler } from "./socket-handlers/manage-agent-socket-
 import { Terminal } from "./terminal";
 import dotenv from "dotenv";
 import { isIPv4 } from "node:net";
+import { ensureDockerNetwork } from "./docker-network";
 
 export class DockgeServer {
     app : Express;
@@ -156,6 +157,7 @@ export class DockgeServer {
         this.config.hostname = args.hostname || process.env.DOCKGE_HOSTNAME || undefined;
         this.config.dataDir = args.dataDir || process.env.DOCKGE_DATA_DIR || "./data/";
         this.config.stacksDir = args.stacksDir || process.env.DOCKGE_STACKS_DIR || defaultStacksDir;
+        this.config.projectsDir = this.getProjectsDir(process.env.DOCKGE_PROJECTS_DIR || "");
         this.config.enableConsole = args.enableConsole || process.env.DOCKGE_ENABLE_CONSOLE === "true" || false;
         this.config.defaultExternalNetwork = this.getSafeDockerName(
             process.env.DOCKGE_DEFAULT_EXTERNAL_NETWORK || ""
@@ -359,6 +361,18 @@ export class DockgeServer {
         return value;
     }
 
+    private getProjectsDir(value : string) : string {
+        const normalized = value.trim();
+        if (!normalized) {
+            return "";
+        }
+        if (!path.isAbsolute(normalized)) {
+            log.warn("server", "DOCKGE_PROJECTS_DIR must be absolute; server project import is disabled.");
+            return "";
+        }
+        return path.normalize(normalized);
+    }
+
     private getSafeDockerName(value : string) : string {
         const normalized = value.trim();
         if (!normalized) {
@@ -415,6 +429,23 @@ export class DockgeServer {
     async serve() {
         // Create all the necessary directories
         this.initDataDir();
+
+        if (this.config.defaultExternalNetwork) {
+            try {
+                const result = await this.ensureDefaultExternalNetwork();
+                if (result === "created") {
+                    log.info("server", `Created default external network ${this.config.defaultExternalNetwork}.`);
+                }
+            } catch (error) {
+                const message = error instanceof Error ? error.message : String(error);
+                log.warn(
+                    "server",
+                    `Could not prepare default external network ${this.config.defaultExternalNetwork}; ` +
+                    `the network preset is disabled: ${message}`
+                );
+                this.config.defaultExternalNetwork = "";
+            }
+        }
 
         // Connect to database
         try {
@@ -699,6 +730,19 @@ export class DockgeServer {
         });
 
         return list;
+    }
+
+    async ensureDefaultExternalNetwork() : Promise<"created" | "existing"> {
+        const networkName = this.config.defaultExternalNetwork;
+        return ensureDockerNetwork(
+            networkName,
+            () => this.getDockerNetworkList(),
+            async (name) => {
+                await childProcessAsync.spawn("docker", [ "network", "create", "--driver", "bridge", name ], {
+                    encoding: "utf-8",
+                });
+            }
+        );
     }
 
     async getDockerStats() : Promise<Map<string, object>> {

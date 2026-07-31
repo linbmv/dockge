@@ -10,7 +10,7 @@ import {
 
 test("extracts Compose short and long published ports", () => {
     assert.deepEqual(extractPublishedPortBindings([
-        "${TS_HOST_IP:?Set TS_HOST_IP in Dockge global.env}:20001:8080",
+        "${TS_HOST_IP:?Set TS_HOST_IP in Dockge Global Variables}:20001:8080",
         "20002:8080/udp",
         "8080",
         {
@@ -58,11 +58,11 @@ test("extracts Docker display syntax and keeps protocols independent", () => {
 test("formats persistent Tailscale host mappings", () => {
     assert.equal(
         formatPublishedPortMapping("TS_HOST_IP", 22000, 8080, "tcp"),
-        "${TS_HOST_IP:?Set TS_HOST_IP in Dockge global.env}:22000:8080"
+        "${TS_HOST_IP:?Set TS_HOST_IP in Dockge Global Variables}:22000:8080"
     );
     assert.equal(
         formatPublishedPortMapping("TS_HOST_IP", 22001, 53, "udp"),
-        "${TS_HOST_IP:?Set TS_HOST_IP in Dockge global.env}:22001:53/udp"
+        "${TS_HOST_IP:?Set TS_HOST_IP in Dockge Global Variables}:22001:53/udp"
     );
 });
 
@@ -83,7 +83,7 @@ test("selects the first free port while keeping TCP and UDP independent", () => 
 });
 
 test("resolves only the required host variable for frontend preview", () => {
-    const yaml = "ports:\n  - \"${TS_HOST_IP:?Set TS_HOST_IP in Dockge global.env}:20001:8080\"\n";
+    const yaml = "ports:\n  - \"${TS_HOST_IP:?Set TS_HOST_IP in Dockge Global Variables}:20001:8080\"\n";
     assert.equal(
         resolveRequiredEnvironmentVariable(yaml, "TS_HOST_IP", "100.64.0.10"),
         "ports:\n  - \"100.64.0.10:20001:8080\"\n"

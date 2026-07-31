@@ -7,16 +7,55 @@ import {
     applyPortRewrites,
     applyPortRewritesToDoc,
     collectReservedPublishedPorts,
+    getRelativeBuildContexts,
+    hasBuildServices,
     planDefaultExternalNetwork,
     planPortPreset
 } from "../common/compose-preset";
 
 const HOST_IP_VARIABLE = "TS_HOST_IP";
-const HOST_IP_EXPRESSION = "${TS_HOST_IP:?Set TS_HOST_IP in Dockge global.env}";
+const HOST_IP_EXPRESSION = "${TS_HOST_IP:?Set TS_HOST_IP in Dockge Global Variables}";
 
 function parse(yaml : string) {
     return parseDocument(yaml).toJS();
 }
+
+test("detects services that need image builds", () => {
+    assert.equal(hasBuildServices(parse(`
+services:
+  local:
+    build: .
+  image_only:
+    image: nginx
+`)), true);
+    assert.equal(hasBuildServices(parse(`
+services:
+  image_only:
+    image: nginx
+`)), false);
+});
+
+test("collects only relative build contexts that need project files", () => {
+    const config = parse(`
+services:
+  root:
+    build: .
+  nested:
+    build:
+      context: ./apps/api
+  implicit:
+    build:
+      dockerfile: Dockerfile.dev
+  remote_http:
+    build: https://github.com/example/project.git
+  remote_ssh:
+    build: git@example.com:project/repository.git
+  mounted_absolute:
+    build: /workspace/project
+`);
+
+    assert.deepEqual(getRelativeBuildContexts(config), [ ".", "./apps/api" ]);
+});
 
 test("plans a rewrite for a wildcard published port", () => {
     const config = parse(`

@@ -4,6 +4,15 @@ import { callbackError, callbackResult, checkLogin, DockgeSocket, ValidationErro
 import { Stack } from "../stack";
 import { AgentSocket } from "../../common/agent-socket";
 import { allocatePublishedPort, allocatePublishedPorts } from "../published-port-allocator";
+import { allocateInternalIPs, getInternalIPDefaults } from "../internal-ip-allocator";
+import { stackFileUploadManager } from "../stack-file-upload";
+import { copyServerProject, inspectServerProject } from "../server-project";
+import { promises as fsAsync } from "node:fs";
+import { parseDocument } from "yaml";
+import {
+    applyInternalIPAllocationsToDoc,
+    servicesNeedingInternalIP,
+} from "../../common/internal-ip";
 
 export class DockerSocketHandler extends AgentSocketHandler {
     create(socket : DockgeSocket, server : DockgeServer, agentSocket : AgentSocket) {
@@ -39,6 +48,161 @@ export class DockerSocketHandler extends AgentSocketHandler {
             } catch (e) {
                 callbackError(e, callback);
             }
+        });
+
+        agentSocket.on("prepareStackBindMounts", async (stackName : unknown, preparations : unknown, callback) => {
+            try {
+                checkLogin(socket);
+                if (typeof stackName !== "string") {
+                    throw new ValidationError("Stack name must be a string");
+                }
+
+                const stack = await Stack.getStack(server, stackName);
+                await stack.prepareBindMountSources(preparations);
+                callbackResult({
+                    ok: true,
+                    msg: "bindMountSourcesPrepared",
+                    msgi18n: true,
+                }, callback);
+            } catch (e) {
+                callbackError(e, callback);
+            }
+        });
+
+        agentSocket.on("inspectServerProject", async (projectPath : unknown, callback) => {
+            try {
+                checkLogin(socket);
+                if (typeof projectPath !== "string") {
+                    throw new ValidationError("Project path must be a string");
+                }
+                const project = await inspectServerProject(server.config.projectsDir, projectPath.trim());
+                callbackResult({
+                    ok: true,
+                    project,
+                }, callback);
+            } catch (e) {
+                callbackError(e, callback);
+            }
+        });
+
+        agentSocket.on("importServerProject", async (name : unknown, projectPath : unknown, composeYAML : unknown, composeENV : unknown, deploy : unknown, callback) => {
+            try {
+                checkLogin(socket);
+                if (typeof name !== "string" || typeof projectPath !== "string") {
+                    throw new ValidationError("Stack name and project path must be strings");
+                }
+                if (typeof composeYAML !== "string" || typeof composeENV !== "string") {
+                    throw new ValidationError("Compose YAML and ENV must be strings");
+                }
+                if (typeof deploy !== "boolean") {
+                    throw new ValidationError("Deploy must be a boolean");
+                }
+
+                new Stack(server, name, composeYAML, composeENV, true).validate();
+                await copyServerProject(
+                    server.config.projectsDir,
+                    server.stacksDir,
+                    name,
+                    projectPath.trim()
+                );
+
+                let stack : Stack;
+                try {
+                    stack = await this.saveStack(server, name, composeYAML, composeENV, false);
+                } catch (error) {
+                    await fsAsync.rm(new Stack(server, name).path, {
+                        recursive: true,
+                        force: true,
+                    });
+                    throw error;
+                }
+
+                server.sendStackList();
+                if (deploy) {
+                    await stack.deploy(socket);
+                    stack.joinCombinedTerminal(socket);
+                }
+
+                callbackResult({
+                    ok: true,
+                    msg: deploy ? "Deployed" : "Saved",
+                    msgi18n: true,
+                }, callback);
+            } catch (e) {
+                callbackError(e, callback);
+            }
+        });
+
+        agentSocket.on("beginStackFileUpload", async (name : unknown, callback) => {
+            try {
+                checkLogin(socket);
+                if (typeof name !== "string") {
+                    throw new ValidationError("Name must be a string");
+                }
+                const uploadID = await stackFileUploadManager.begin(server.stacksDir, socket.id, name);
+                callbackResult({
+                    ok: true,
+                    uploadID,
+                }, callback);
+            } catch (e) {
+                callbackError(e, callback);
+            }
+        });
+
+        agentSocket.on("uploadStackFileChunk", async (uploadID : unknown, relativePath : unknown, offset : unknown, chunk : unknown, callback) => {
+            try {
+                checkLogin(socket);
+                await stackFileUploadManager.writeChunk(socket.id, uploadID, relativePath, offset, chunk);
+                callbackResult({ ok: true }, callback);
+            } catch (e) {
+                callbackError(e, callback);
+            }
+        });
+
+        agentSocket.on("finishStackFileUpload", async (uploadID : unknown, composeYAML : unknown, composeENV : unknown, deploy : unknown, callback) => {
+            try {
+                checkLogin(socket);
+                if (typeof composeYAML !== "string") {
+                    throw new ValidationError("Compose YAML must be a string");
+                }
+                if (typeof composeENV !== "string") {
+                    throw new ValidationError("Compose ENV must be a string");
+                }
+                if (typeof deploy !== "boolean") {
+                    throw new ValidationError("Deploy must be a boolean");
+                }
+
+                new Stack(server, "upload-validation", composeYAML, composeENV, true).validate();
+                const sessionStackName = await stackFileUploadManager.finish(socket.id, uploadID);
+                const stack = await this.saveStack(server, sessionStackName, composeYAML, composeENV, false);
+                server.sendStackList();
+                if (deploy) {
+                    await stack.deploy(socket);
+                    stack.joinCombinedTerminal(socket);
+                }
+
+                callbackResult({
+                    ok: true,
+                    msg: deploy ? "Deployed" : "Saved",
+                    msgi18n: true,
+                }, callback);
+            } catch (e) {
+                callbackError(e, callback);
+            }
+        });
+
+        agentSocket.on("cancelStackFileUpload", async (uploadID : unknown, callback) => {
+            try {
+                checkLogin(socket);
+                await stackFileUploadManager.cancel(socket.id, uploadID);
+                callbackResult({ ok: true }, callback);
+            } catch (e) {
+                callbackError(e, callback);
+            }
+        });
+
+        socket.on("disconnect", () => {
+            void stackFileUploadManager.cancelForSocket(socket.id);
         });
 
         agentSocket.on("deleteStack", async (name : unknown, callback) => {
@@ -356,6 +520,17 @@ export class DockerSocketHandler extends AgentSocketHandler {
         agentSocket.on("getStackDefaults", async (callback) => {
             try {
                 checkLogin(socket);
+                let internalIPDefaults = {
+                    networkName: server.config.defaultExternalNetwork,
+                    subnet: "",
+                    prefix: "",
+                };
+                try {
+                    internalIPDefaults = await getInternalIPDefaults(server);
+                } catch {
+                    // Keep the other editor defaults available while Docker is
+                    // unavailable or the configured network has not been created.
+                }
                 callbackResult({
                     ok: true,
                     defaults: {
@@ -364,7 +539,24 @@ export class DockerSocketHandler extends AgentSocketHandler {
                         publishedHostIPValue: server.getPublishedHostIPValue(),
                         publishedPortStart: server.config.publishedPortStart,
                         publishedPortEnd: server.config.publishedPortEnd,
+                        projectsDir: server.config.projectsDir,
+                        internalIPNetwork: internalIPDefaults.networkName,
+                        internalIPSubnet: internalIPDefaults.subnet,
+                        internalIPPrefix: internalIPDefaults.prefix,
                     },
+                }, callback);
+            } catch (e) {
+                callbackError(e, callback);
+            }
+        });
+
+        agentSocket.on("allocateInternalIPs", async (currentEditorConfig : unknown, callback) => {
+            try {
+                checkLogin(socket);
+                const allocations = await allocateInternalIPs(server, currentEditorConfig);
+                callbackResult({
+                    ok: true,
+                    allocations,
                 }, callback);
             } catch (e) {
                 callbackError(e, callback);
@@ -413,9 +605,35 @@ export class DockerSocketHandler extends AgentSocketHandler {
             throw new ValidationError("isAdd must be a boolean");
         }
 
-        const stack = new Stack(server, name, composeYAML, composeENV, false);
+        const preparedComposeYAML = await this.prepareInternalIPComposeYAML(server, composeYAML);
+        const stack = new Stack(server, name, preparedComposeYAML, composeENV, false);
         await stack.save(isAdd);
         return stack;
+    }
+
+    private async prepareInternalIPComposeYAML(server : DockgeServer, composeYAML : string) : Promise<string> {
+        const networkName = server.config.defaultExternalNetwork;
+        if (!networkName) {
+            return composeYAML;
+        }
+
+        const document = parseDocument(composeYAML);
+        if (document.errors.length > 0) {
+            return composeYAML;
+        }
+
+        const config = document.toJS();
+        if (servicesNeedingInternalIP(config, networkName).length === 0) {
+            return composeYAML;
+        }
+
+        const allocations = await allocateInternalIPs(server, config);
+        if (allocations.length === 0) {
+            return composeYAML;
+        }
+
+        applyInternalIPAllocationsToDoc(document, networkName, allocations);
+        return document.toString();
     }
 
 }

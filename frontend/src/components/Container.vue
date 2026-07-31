@@ -12,6 +12,9 @@
                     <a v-for="port in (ports ?? envsubstService.ports)" :key="port" :href="parsePort(port).url" target="_blank">
                         <span class="badge me-1 bg-secondary">{{ parsePort(port).display }}</span>
                     </a>
+                    <span v-if="internalIPAddress" class="badge me-1 bg-info text-dark">
+                        {{ $t("internalIP") }}: {{ internalIPAddress }}
+                    </span>
                 </div>
             </div>
             <div class="col-7">
@@ -374,6 +377,25 @@ export default defineComponent({
             } else {
                 return "";
             }
+        },
+        internalIPAddress() {
+            const actual = Array.isArray(this.serviceStatus)
+                ? this.serviceStatus.find(instance => typeof instance.internalIP === "string")?.internalIP
+                : undefined;
+            if (actual) {
+                return actual;
+            }
+
+            const networkName = this.stackDefaults.internalIPNetwork || this.stackDefaults.defaultExternalNetwork;
+            const networks = this.envsubstService.networks ?? this.service.networks;
+            if (!networkName || !networks || Array.isArray(networks) || typeof networks !== "object") {
+                return "";
+            }
+
+            const network = networks[networkName];
+            return network && typeof network === "object" && typeof network.ipv4_address === "string"
+                ? network.ipv4_address
+                : "";
         },
         statsInstances() {
             if (!this.serviceStatus) {

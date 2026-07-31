@@ -244,7 +244,7 @@ export function resolveRequiredEnvironmentVariable(
  * It fails closed at deploy time when the variable is not set.
  */
 export function formatPublishedHostIPExpression(hostIPVariable : string) : string {
-    return `\${${hostIPVariable}:?Set ${hostIPVariable} in Dockge global.env}`;
+    return `\${${hostIPVariable}:?Set ${hostIPVariable} in Dockge Global Variables}`;
 }
 
 export function formatPublishedPortMapping(

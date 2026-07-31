@@ -24,10 +24,15 @@ services:
       # ⚠️ 1. FULL path only. No relative path (MUST)
       # ⚠️ 2. Left Stacks Path === Right Stacks Path (MUST)
       - /opt/stacks:/opt/stacks
+
+      # Optional: allow authenticated users to import existing server projects.
+      # Mount the same absolute path read-only and set DOCKGE_PROJECTS_DIR below.
+      # - /srv/docker-projects:/srv/docker-projects:ro
     environment:
       # Tell Dockge where is your stacks directory
       - DOCKGE_STACKS_DIR=/opt/stacks
-      # Optional homelab defaults. D_Home must already exist on the Docker host.
+      # - DOCKGE_PROJECTS_DIR=/srv/docker-projects
+      # Optional homelab defaults. Dockge creates D_Home when it is missing.
       - DOCKGE_DEFAULT_EXTERNAL_NETWORK=D_Home
       - DOCKGE_PUBLISHED_HOST_IP_VARIABLE=TS_HOST_IP
       - DOCKGE_PUBLISHED_PORT_START=20000

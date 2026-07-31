@@ -124,7 +124,7 @@ services:
     networks:
       - D_Home
     ports:
-      - "${TS_HOST_IP:?Set TS_HOST_IP in Dockge global.env}:20001:8080"
+      - "${TS_HOST_IP:?Set TS_HOST_IP in Dockge Global Variables}:20001:8080"
 
 networks:
   D_Home:
@@ -140,6 +140,21 @@ Cloudflare reaches `http://app:8080`; Tailnet clients reach
 
 - Detect a Git worktree at the managed Stack root.
 - Show a `Git Pull & Build` action only for eligible Stacks.
+- Present `Image / Compose` and `Local Build` as explicit creation sources.
+  Selecting `Local Build` accepts an existing server project path by default,
+  imports its root Compose file and `.env`, and derives the Stack name from the
+  folder. Browser folder upload remains a fallback.
+- Restrict server paths to the administrator-configured `DOCKGE_PROJECTS_DIR`.
+  Resolve real paths before access, reject the configured root and symlink
+  escapes, copy into a hidden Stack staging directory, then publish atomically.
+- When a new Compose file contains a relative `build.context`, require the
+  operator to select the complete local project folder. Upload regular files
+  to a hidden temporary directory in 512 KiB chunks, then publish the folder
+  atomically as the Stack root before deployment.
+- Keep the edited Compose and `.env` content authoritative over files with the
+  same names in the selected project folder. Limit uploads to 5,000 files and
+  100 MiB, reject absolute/traversal paths, and discard incomplete sessions on
+  cancellation or disconnect.
 - Run the following fixed operation in the existing progress terminal:
 
   ```sh
@@ -159,6 +174,13 @@ Cloudflare reaches `http://app:8080`; Tailnet clients reach
 ### Acceptance
 
 - Non-Git Stacks do not show the action and the backend rejects direct calls.
+- A newly uploaded `build: .` project includes its Dockerfile and build context
+  in the Stack directory, and its first deployment explicitly uses `--build`.
+- Selecting a local project with a standard root Compose file is enough to
+  populate the new Stack form; no paste-then-select sequence is required.
+- A configured VPS project path can be loaded without opening the browser's
+  local file picker, while paths outside the configured root are rejected.
+- An incomplete upload never becomes a visible managed Stack.
 - A failed pull prevents the build/deploy step.
 - Pull and build output stream through the normal progress terminal.
 - No repository path, shell fragment, token, or credential is accepted from
@@ -206,7 +228,7 @@ DOCKGE_PUBLISHED_PORT_END=39999
   current unsaved editor, and short-lived in-process reservations.
 - Allocation is conservative across host addresses and persists a fail-closed
   Compose mapping such as
-  `${TS_HOST_IP:?Set TS_HOST_IP in Dockge global.env}:20001:8080`.
+  `${TS_HOST_IP:?Set TS_HOST_IP in Dockge Global Variables}:20001:8080`.
 - If a saved Stack cannot be parsed for collision detection, allocation fails
   explicitly instead of guessing that its ports are free.
 - Host-native listeners are outside the Dockge container's network namespace;
