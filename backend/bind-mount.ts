@@ -82,7 +82,7 @@ function displayBindSource(stackPath: string, source: string) {
     }
 
     const relative = path.relative(stackPath, source);
-    return `.${path.sep}${relative}`;
+    return "./" + relative.split(path.sep).join("/");
 }
 
 export function suggestBindMountSourceType(source: string, target: string) : BindMountSourceType {
