@@ -46,7 +46,28 @@ jobs:
         run: npm run check-ts
 
       - name: Test
-        run: npm test
+        shell: bash
+        run: |
+          set +e
+          npm test > test-output.log 2>&1
+          status=$?
+          cat test-output.log
+          if [ "$status" -ne 0 ]; then
+            awk '
+              /^not ok [0-9]+ / { in_failure=1; block=$0; next }
+              in_failure {
+                block=block "\n" $0
+              }
+              in_failure && /^  \.\.\.$/ {
+                gsub(/%/, "%25", block)
+                gsub(/\r/, "%0D", block)
+                gsub(/\n/, "%0A", block)
+                printf "::error title=Failed test::%s\n", block
+                in_failure=0
+              }
+            ' test-output.log
+          fi
+          exit "$status"
 
       - name: Build
         run: npm run build:frontend
