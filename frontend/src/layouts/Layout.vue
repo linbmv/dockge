@@ -35,18 +35,6 @@
                     <!-- Nav items -->
                     <ul class="nav nav-pills align-items-center gap-2 m-0">
                         <li v-if="$root.loggedIn" class="nav-item">
-                            <router-link to="/" class="nav-link px-3 py-2">
-                                <font-awesome-icon icon="home" class="me-1" /> {{ $t("home") }}
-                            </router-link>
-                        </li>
-
-                        <li v-if="$root.loggedIn" class="nav-item">
-                            <router-link to="/console" class="nav-link px-3 py-2">
-                                <font-awesome-icon icon="terminal" class="me-1" /> {{ $t("console") }}
-                            </router-link>
-                        </li>
-
-                        <li v-if="$root.loggedIn" class="nav-item">
                             <div class="dropdown dropdown-profile-pic">
                                 <div class="nav-link profile-trigger px-3 py-2" data-bs-toggle="dropdown">
                                     <div class="profile-pic">{{ $root.usernameFirstChar }}</div>
@@ -66,13 +54,7 @@
                                     <li><hr class="dropdown-divider my-1"></li>
 
                                     <li>
-                                        <button class="dropdown-item py-2" @click="scanFolder">
-                                            <font-awesome-icon icon="arrows-rotate" class="me-2 text-primary" /> {{ $t("scanFolder") }}
-                                        </button>
-                                    </li>
-
-                                    <li>
-                                        <router-link to="/settings/general" class="dropdown-item py-2" :class="{ active: $route.path.includes('settings') }">
+                                        <router-link to="/settings/operations" class="dropdown-item py-2" :class="{ active: $route.path.includes('settings') }">
                                             <font-awesome-icon icon="cog" class="me-2 text-primary" /> {{ $t("Settings") }}
                                         </router-link>
                                     </li>
@@ -108,7 +90,6 @@
 <script>
 import Login from "../components/Login.vue";
 import { compareVersions } from "compare-versions";
-import { ALL_ENDPOINTS } from "../../../common/util-common";
 
 export default {
 
@@ -154,13 +135,7 @@ export default {
 
     },
 
-    methods: {
-        scanFolder() {
-            this.$root.emitAgent(ALL_ENDPOINTS, "requestStackList", (res) => {
-                this.$root.toastRes(res);
-            });
-        },
-    },
+    methods: {},
 
 };
 </script>
@@ -170,13 +145,14 @@ export default {
 @import "../styles/design-tokens.scss";
 
 .modern-header {
-    background: rgba(15, 20, 25, 0.75);
-    backdrop-filter: blur(16px);
-    -webkit-backdrop-filter: blur(16px);
-    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    background: #161b22;
+    border-bottom: 1px solid #28313d;
     position: sticky;
     top: 0;
     z-index: 1000;
+    padding-top: 9px !important;
+    padding-bottom: 9px !important;
+    margin-bottom: 12px !important;
 
     .header-inner {
         max-width: 1600px;
@@ -189,29 +165,22 @@ export default {
         display: flex;
         align-items: center;
         justify-content: center;
-        width: 38px;
-        height: 38px;
-        border-radius: var(--radius-base);
-        background: rgba(56, 189, 248, 0.1);
-        border: 1px solid rgba(56, 189, 248, 0.2);
-        transition: all var(--transition-fast);
+        width: 30px;
+        height: 30px;
+        border-radius: 6px;
+        background: #202936;
+        border: 1px solid #344152;
 
         &:hover {
-            transform: scale(1.05);
-            border-color: rgba(56, 189, 248, 0.4);
-            box-shadow: var(--glow-cyan);
+            border-color: #4b9cd3;
         }
     }
 
     .title {
         font-family: var(--font-display);
-        font-size: var(--text-xl);
+        font-size: 1.1rem;
         font-weight: 700;
-        letter-spacing: var(--tracking-tight);
-        background: linear-gradient(135deg, #38bdf8 0%, #6ee7b7 100%);
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
-        background-clip: text;
+        color: #f0f3f6;
     }
 }
 
@@ -219,20 +188,19 @@ export default {
     .nav-link {
         color: #94a3b8;
         font-weight: 500;
-        font-size: var(--text-sm);
-        border-radius: var(--radius-pill);
-        transition: all var(--transition-fast);
+        font-size: 0.875rem;
+        border-radius: 6px;
+        transition: background-color 120ms ease, color 120ms ease;
 
         &:hover {
             color: #f8fafc;
-            background: rgba(255, 255, 255, 0.06);
+            background: #202936;
         }
 
         &.router-link-exact-active, &.active {
-            color: #0f1419;
-            background: linear-gradient(135deg, #38bdf8 0%, #6ee7b7 100%);
+            color: #f0f3f6;
+            background: #2d4054;
             font-weight: 600;
-            box-shadow: 0 0 15px rgba(56, 189, 248, 0.3);
         }
     }
 }
@@ -245,14 +213,14 @@ export default {
         align-items: center;
         gap: 6px;
         cursor: pointer;
-        border-radius: var(--radius-pill);
-        background: rgba(255, 255, 255, 0.05);
-        border: 1px solid rgba(255, 255, 255, 0.08);
-        transition: all var(--transition-fast);
+        border-radius: 6px;
+        background: #202936;
+        border: 1px solid #344152;
+        transition: background-color 120ms ease, border-color 120ms ease;
 
         &:hover {
-            background: rgba(255, 255, 255, 0.1);
-            border-color: rgba(255, 255, 255, 0.15);
+            background: #283443;
+            border-color: #4b596a;
         }
     }
 

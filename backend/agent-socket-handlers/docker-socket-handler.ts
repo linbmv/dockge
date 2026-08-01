@@ -8,6 +8,7 @@ import { allocateInternalIPs, getInternalIPDefaults } from "../internal-ip-alloc
 import { stackFileUploadManager } from "../stack-file-upload";
 import { copyServerProject, inspectServerProject } from "../server-project";
 import { promises as fsAsync } from "node:fs";
+import os from "node:os";
 import { parseDocument } from "yaml";
 import {
     applyInternalIPAllocationsToDoc,
@@ -436,6 +437,54 @@ export class DockerSocketHandler extends AgentSocketHandler {
                     dockerStats,
                 }, callback);
                 server.sendStackList();
+            } catch (e) {
+                callbackError(e, callback);
+            }
+        });
+
+        // Host information for the dashboard sidebar. This is deliberately
+        // read-only and stays on the agent that owns the Docker socket.
+        agentSocket.on("hostStats", async (callback) => {
+            try {
+                checkLogin(socket);
+
+                const cpuCount = Math.max(os.cpus().length, 1);
+                const loadAverage = os.loadavg()[0] || 0;
+                const totalMemoryBytes = os.totalmem();
+                const freeMemoryBytes = os.freemem();
+                const hostInterfaces = os.networkInterfaces();
+                let detectedHostIP = "";
+
+                for (const addresses of Object.values(hostInterfaces)) {
+                    const address = addresses?.find(item => item.family === "IPv4" && !item.internal);
+                    if (address?.address) {
+                        detectedHostIP = address.address;
+                        break;
+                    }
+                }
+
+                let subnet = "";
+                try {
+                    subnet = (await getInternalIPDefaults(server)).subnet;
+                } catch {
+                    // Docker network information is optional for the card.
+                }
+
+                callbackResult({
+                    ok: true,
+                    hostStats: {
+                        hostname: os.hostname(),
+                        hostIP: server.getPublishedHostIPValue() || detectedHostIP,
+                        subnet,
+                        platform: `${os.platform()} (${os.release()})`,
+                        cpuCount,
+                        cpuLoadPercent: Math.round(Math.min(loadAverage / cpuCount * 100, 100) * 10) / 10,
+                        totalMemoryBytes,
+                        usedMemoryBytes: Math.max(totalMemoryBytes - freeMemoryBytes, 0),
+                        memoryPercent: Math.round((totalMemoryBytes - freeMemoryBytes) / totalMemoryBytes * 1000) / 10,
+                        uptimeSeconds: os.uptime(),
+                    },
+                }, callback);
             } catch (e) {
                 callbackError(e, callback);
             }

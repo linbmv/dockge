@@ -13,6 +13,7 @@ const Settings = () => import("./pages/Settings.vue");
 // Settings - Sub Pages
 import Appearance from "./components/settings/Appearance.vue";
 import General from "./components/settings/General.vue";
+import Operations from "./components/settings/Operations.vue";
 const Security = () => import("./components/settings/Security.vue");
 const GlobalEnv = () => import("./components/settings/GlobalEnv.vue");
 import About from "./components/settings/About.vue";
@@ -67,6 +68,10 @@ const routes = [
                         path: "/settings",
                         component: Settings,
                         children: [
+                            {
+                                path: "operations",
+                                component: Operations,
+                            },
                             {
                                 path: "general",
                                 component: General,

@@ -60,10 +60,18 @@ export default {
         },
     },
     mounted() {
-
+        window.addEventListener("keydown", this.handleEscapeKey, true);
+    },
+    unmounted() {
+        window.removeEventListener("keydown", this.handleEscapeKey, true);
     },
     methods: {
-
+        handleEscapeKey(event) {
+            if (event.key === "Escape") {
+                event.preventDefault();
+                this.$router.push("/");
+            }
+        },
     }
 };
 </script>

@@ -84,6 +84,17 @@ export class Stack {
     }
 
     toSimpleJSON(endpoint : string) : object {
+        let serviceNames : string[] = [];
+        if (this.isManagedByDockge) {
+            try {
+                const config = yaml.parse(this.composeYAML);
+                if (config?.services && typeof config.services === "object") {
+                    serviceNames = Object.keys(config.services);
+                }
+            } catch (error) {
+                log.debug("stack", `Unable to read service names for ${this.name}: ${error}`);
+            }
+        }
         return {
             name: this.name,
             status: this._status,
@@ -91,6 +102,7 @@ export class Stack {
             isManagedByDockge: this.isManagedByDockge,
             isGitRepository: this.isGitRepository,
             composeFileName: this._composeFileName,
+            serviceNames,
             endpoint,
         };
     }
@@ -646,13 +658,22 @@ export class Stack {
 
             let lines = res.stdout?.toString().split("\n");
 
-            const addLine = (obj: { Service: string, State: string, Name: string, Health: string }) => {
+            const addLine = (obj: {
+                Service: string;
+                State: string;
+                Name: string;
+                Health: string;
+                Publishers?: unknown;
+                Ports?: unknown;
+            }) => {
                 if (!statusList.has(obj.Service)) {
                     statusList.set(obj.Service, []);
                 }
                 statusList.get(obj.Service)?.push({
                     status: obj.Health || obj.State,
-                    name: obj.Name
+                    name: obj.Name,
+                    publishers: obj.Publishers,
+                    ports: obj.Ports,
                 });
             };
 

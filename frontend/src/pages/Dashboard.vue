@@ -1,28 +1,19 @@
 <template>
-    <div class="container-fluid">
-        <div class="row">
-            <div v-if="!$root.isMobile" class="col-12 col-md-4 col-xl-3">
-                <div>
-                    <router-link to="/compose" class="btn btn-primary mb-3"><font-awesome-icon icon="plus" /> {{ $t("compose") }}</router-link>
-                </div>
-                <StackList :scrollbar="true" />
-            </div>
-
-            <div ref="container" class="col-12 col-md-8 col-xl-9 mb-3">
-                <!-- Add :key to disable vue router re-use the same component -->
-                <router-view :key="$route.fullPath" :calculatedHeight="height" />
-            </div>
+    <div class="container-fluid dashboard-shell">
+        <DashboardSidebar />
+        <div ref="container" class="dashboard-content mb-3">
+            <!-- Add :key to disable vue router re-use the same component -->
+            <router-view :key="$route.fullPath" :calculatedHeight="height" />
         </div>
     </div>
 </template>
 
 <script>
-
-import StackList from "../components/StackList.vue";
+import DashboardSidebar from "../components/DashboardSidebar.vue";
 
 export default {
     components: {
-        StackList,
+        DashboardSidebar,
     },
     data() {
         return {
@@ -37,6 +28,26 @@ export default {
 
 <style lang="scss" scoped>
 .container-fluid {
-    width: 98%;
+    width: 100%;
+}
+
+.dashboard-shell {
+    display: grid;
+    grid-template-columns: 252px minmax(0, 1fr);
+    align-items: start;
+    gap: 14px;
+    max-width: 1600px;
+    margin: 0 auto;
+}
+
+.dashboard-content {
+    min-width: 0;
+    width: 100%;
+}
+
+@media (max-width: 991px) {
+    .dashboard-shell {
+        grid-template-columns: minmax(0, 1fr);
+    }
 }
 </style>

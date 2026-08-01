@@ -1,57 +1,70 @@
 <template>
     <div class="shadow-box big-padding mb-3 container">
-        <div class="row">
-            <div class="col-5">
+        <div class="container-summary">
+            <div class="container-identity">
+                <span class="meta-label">{{ $t("containerName") }}</span>
                 <h4>{{ name }}</h4>
-                <div class="image mb-2">
+                <div v-if="imageName || imageTag" class="image">
                     <span class="me-1">{{ imageName }}:</span><span class="tag">{{ imageTag }}</span>
                 </div>
-                <div v-if="!isEditMode">
-                    <span class="badge me-1" :class="bgStyle">{{ status }}</span>
+            </div>
 
-                    <a v-for="port in (ports ?? envsubstService.ports)" :key="port" :href="parsePort(port).url" target="_blank">
-                        <span class="badge me-1 bg-secondary">{{ parsePort(port).display }}</span>
-                    </a>
-                    <span v-if="internalIPAddress" class="badge me-1 bg-info text-dark">
-                        {{ $t("internalIP") }}: {{ internalIPAddress }}
-                    </span>
+            <div v-if="!isEditMode" class="container-details">
+                <div class="container-detail">
+                    <span class="meta-label">{{ $t("internalIP") }}</span>
+                    <code v-if="internalIPAddress" class="ip-value">{{ internalIPAddress }}</code>
+                    <span v-else class="muted-value">—</span>
+                </div>
+                <div class="container-detail container-ports">
+                    <span class="meta-label">{{ $tc("port", 2) }}</span>
+                    <div class="port-values">
+                        <a v-for="port in (ports ?? envsubstService.ports)" :key="port" :href="parsePort(port).url" target="_blank">
+                            <span class="badge bg-secondary">{{ parsePort(port).display }}</span>
+                        </a>
+                        <span v-if="!(ports ?? envsubstService.ports)?.length" class="muted-value">—</span>
+                    </div>
                 </div>
             </div>
-            <div class="col-7">
-                <div class="function">
-                    <div class="btn-group me-2" role="group">
-                        <router-link v-if="!isEditMode && (status === 'running' || status === 'healthy')" class="btn btn-normal" :to="terminalRouteLink" disabled="">
-                            <font-awesome-icon icon="terminal" />
-                            Bash
-                        </router-link>
-                        <button
-                            v-if="serviceCount > 1 && !isEditMode && status !== 'running' && status !== 'healthy'"
-                            class="btn btn-primary"
-                            :disabled="processing"
-                            @click="startService"
-                        >
-                            <font-awesome-icon icon="play" class="me-1" />
-                            {{ $t("startStack") }}
-                        </button>
-                        <button
-                            v-if="serviceCount > 1 && !isEditMode && (status === 'running' || status === 'healthy' || status === 'unhealthy')"
-                            class="btn btn-normal"
-                            :disabled="processing"
-                            @click="restartService"
-                        >
-                            <font-awesome-icon icon="rotate" class="me-1" />
-                            {{ $t("restartStack") }}
-                        </button>
-                        <button
-                            v-if="serviceCount > 1 && !isEditMode && (status === 'running' || status === 'healthy' || status === 'unhealthy')"
-                            class="btn btn-normal"
-                            :disabled="processing"
-                            @click="stopService"
-                        >
-                            <font-awesome-icon icon="stop" class="me-1" />
-                            {{ $t("stopStack") }}
-                        </button>
-                    </div>
+
+            <div v-if="!isEditMode" class="container-status">
+                <span class="badge" :class="bgStyle">{{ status }}</span>
+            </div>
+        </div>
+
+        <div v-if="!isEditMode && serviceCount > 1" class="container-actionbar">
+            <div class="function">
+                <div class="btn-group" role="group">
+                    <router-link v-if="serviceCount > 1 && !isEditMode && (status === 'running' || status === 'healthy' || status === 'unhealthy')" class="btn btn-normal" :to="terminalRouteLink">
+                        <font-awesome-icon icon="terminal" />
+                        Bash
+                    </router-link>
+                    <button
+                        v-if="serviceCount > 1 && !isEditMode && status !== 'running' && status !== 'healthy'"
+                        class="btn btn-primary"
+                        :disabled="processing"
+                        @click="startService"
+                    >
+                        <font-awesome-icon icon="play" class="me-1" />
+                        {{ $t("startStack") }}
+                    </button>
+                    <button
+                        v-if="serviceCount > 1 && !isEditMode && (status === 'running' || status === 'healthy' || status === 'unhealthy')"
+                        class="btn btn-normal"
+                        :disabled="processing"
+                        @click="restartService"
+                    >
+                        <font-awesome-icon icon="rotate" class="me-1" />
+                        {{ $t("restartStack") }}
+                    </button>
+                    <button
+                        v-if="serviceCount > 1 && !isEditMode && (status === 'running' || status === 'healthy' || status === 'unhealthy')"
+                        class="btn btn-normal"
+                        :disabled="processing"
+                        @click="stopService"
+                    >
+                        <font-awesome-icon icon="pause" class="me-1" />
+                        {{ $t("stopStack") }}
+                    </button>
                 </div>
             </div>
         </div>
@@ -505,25 +518,111 @@ export default defineComponent({
 @import "../styles/design-tokens.scss";
 
 .container {
-    background: rgba(22, 29, 38, 0.8);
-    backdrop-filter: blur(12px);
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    border-radius: var(--radius-xl);
-    padding: var(--space-6);
-    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
-    transition: all var(--transition-base);
+    background: #10161e;
+    border: 1px solid #28313d;
+    border-radius: 8px;
+    padding: 12px;
+    box-shadow: none;
+    transition: border-color 120ms ease, background-color 120ms ease;
 
     &:hover {
-        border-color: rgba(255, 255, 255, 0.15);
+        border-color: #3b4b5d;
+        background: #121a23;
+    }
+
+    .container-summary {
+        display: grid;
+        grid-template-columns: minmax(180px, 0.85fr) minmax(0, 1.8fr) max-content;
+        gap: 16px;
+        align-items: center;
+    }
+
+    .container-identity,
+    .container-details {
+        min-width: 0;
+    }
+
+    .container-actionbar {
+        display: flex;
+        justify-content: flex-start;
+        margin-top: 10px;
+        padding-top: 10px;
+        border-top: 1px solid #28313d;
+    }
+
+    .container-details {
+        display: grid;
+        grid-template-columns: minmax(120px, 0.8fr) minmax(0, 1.4fr);
+        width: 100%;
+        align-items: center;
+        gap: 12px;
+    }
+
+    .container-detail {
+        min-width: 0;
+    }
+
+    .container-status {
+        justify-self: end;
+        white-space: nowrap;
+    }
+
+    .meta-label {
+        display: block;
+        margin-bottom: 3px;
+        color: #718096;
+        font-size: 0.7rem;
+        line-height: 1.1;
+        white-space: nowrap;
+    }
+
+    .ip-value {
+        color: #d7e4ef;
+        font-family: var(--font-mono);
+        font-size: 0.8rem;
+    }
+
+    .muted-value {
+        color: #64748b;
+    }
+
+    .port-values {
+        display: flex;
+        min-width: 0;
+        flex-wrap: wrap;
+        gap: 4px;
+
+        a {
+            display: block;
+            min-width: 0;
+            max-width: 100%;
+        }
+    }
+
+    h4 {
+        margin-bottom: 4px;
+        font-size: 0.95rem;
+        line-height: 1.2;
+    }
+
+    .badge {
+        max-width: 100%;
+        overflow: hidden;
+        padding: 3px 6px;
+        border-radius: 4px;
+        font-size: 0.7rem;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        font-weight: 600;
     }
 
     .image {
         font-size: 0.8rem;
-        color: #94a3b8;
+        color: #8c99a8;
         font-family: var(--font-mono);
 
         .tag {
-            color: #38bdf8;
+            color: #9acff0;
             font-weight: 600;
         }
     }
@@ -531,20 +630,57 @@ export default defineComponent({
     .function {
         align-content: center;
         display: flex;
-        height: 100%;
-        width: 100%;
         align-items: center;
-        justify-content: flex-end;
+        justify-content: flex-start;
     }
 
     .stats {
-        font-size: 0.8rem;
-        color: #94a3b8;
+        font-size: 0.75rem;
+        color: #8c99a8;
         font-family: var(--font-mono);
     }
 
     .protocol-select {
         max-width: 95px;
+    }
+}
+
+@media (max-width: 900px) {
+    .container .container-summary {
+        grid-template-columns: 1fr;
+        gap: 10px;
+    }
+
+    .container .container-details {
+        grid-template-columns: minmax(120px, 0.8fr) minmax(0, 1.4fr);
+        gap: 16px;
+    }
+
+    .container .container-actionbar {
+        margin-top: 8px;
+    }
+}
+
+@media (max-width: 550px) {
+    .container .container-summary {
+        display: block;
+    }
+
+    .container .container-details {
+        grid-template-columns: 1fr 1fr;
+    }
+
+    .container .container-status {
+        justify-self: start;
+    }
+
+    .container .container-actionbar,
+    .container .container-details {
+        margin-top: 10px;
+    }
+
+    .container .function {
+        justify-content: flex-start;
     }
 }
 </style>

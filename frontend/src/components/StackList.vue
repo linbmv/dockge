@@ -79,6 +79,8 @@
                 />
             </div>
         </div>
+
+        <HostStats />
     </div>
 
     <Confirm ref="confirmPause" :yes-text="$t('Yes')" :no-text="$t('No')" @yes="pauseSelected">
@@ -88,12 +90,14 @@
 
 <script>
 import Confirm from "../components/Confirm.vue";
+import HostStats from "../components/HostStats.vue";
 import StackListItem from "../components/StackListItem.vue";
 import { CREATED_FILE, CREATED_STACK, EXITED, RUNNING, UNKNOWN, statusNameShort } from "../../../common/util-common";
 
 export default {
     components: {
         Confirm,
+        HostStats,
         StackListItem,
     },
     props: {
@@ -248,15 +252,10 @@ export default {
         },
 
         stackListStyle() {
-            //let listHeaderHeight = 107;
-            let listHeaderHeight = 60;
-
-            if (this.selectMode) {
-                listHeaderHeight += 42;
-            }
-
             return {
-                "height": `calc(100% - ${listHeaderHeight}px)`
+                // The parent is a flex column; keeping this auto lets the
+                // host card occupy the bottom without overlapping the list.
+                "height": "auto"
             };
         },
 
@@ -408,23 +407,22 @@ export default {
 @import "../styles/design-tokens.scss";
 
 .shadow-box-modern {
-    background: rgba(22, 29, 38, 0.8);
-    backdrop-filter: blur(12px);
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    border-radius: var(--radius-xl);
-    padding: 14px;
-    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+    background: #10161e;
+    border: 1px solid #28313d;
+    border-radius: 8px;
+    padding: 10px;
+    box-shadow: none;
     position: sticky;
-    top: 80px;
-    height: calc(100vh - 120px);
+    top: 64px;
+    height: calc(100vh - 96px);
     display: flex;
     flex-direction: column;
 }
 
 .list-header {
-    margin-bottom: 12px;
-    padding-bottom: 10px;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    margin-bottom: 8px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid #28313d;
 }
 
 .search-container {
@@ -448,10 +446,10 @@ export default {
         width: 100%;
         padding-left: 36px;
         padding-right: 32px;
-        height: 38px;
-        background: rgba(15, 20, 25, 0.6);
-        border: 1px solid rgba(255, 255, 255, 0.1);
-        border-radius: var(--radius-pill);
+        height: 32px;
+        background: #0b1016;
+        border: 1px solid #2a3542;
+        border-radius: 6px;
         color: #f8fafc;
         font-size: var(--text-xs);
         transition: all var(--transition-fast);
@@ -461,9 +459,9 @@ export default {
         }
 
         &:focus {
-            background: rgba(15, 20, 25, 0.9);
-            border-color: #38bdf8;
-            box-shadow: 0 0 12px rgba(56, 189, 248, 0.2);
+            background: #0b1016;
+            border-color: #4b9cd3;
+            box-shadow: 0 0 0 2px rgba(75, 156, 211, 0.12);
             outline: none;
         }
     }
@@ -501,11 +499,11 @@ export default {
     display: inline-flex;
     align-items: center;
     gap: 4px;
-    padding: 4px 10px;
+    padding: 3px 8px;
     font-size: 11px;
     font-weight: 500;
-    border-radius: var(--radius-pill);
-    background: rgba(255, 255, 255, 0.04);
+    border-radius: 5px;
+    background: transparent;
     color: #94a3b8;
     border: 1px solid rgba(255, 255, 255, 0.06);
     cursor: pointer;
@@ -513,14 +511,14 @@ export default {
     transition: all var(--transition-fast);
 
     &:hover {
-        background: rgba(255, 255, 255, 0.08);
+        background: #202936;
         color: #f8fafc;
     }
 
     &.active {
-        background: rgba(56, 189, 248, 0.15);
-        color: #38bdf8;
-        border-color: rgba(56, 189, 248, 0.3);
+        background: #20394d;
+        color: #8ed0f5;
+        border-color: #2f6388;
         font-weight: 600;
     }
 
@@ -557,7 +555,7 @@ export default {
     font-size: 12px;
     font-weight: 600;
     color: #64748b;
-    padding: 6px 8px;
+    padding: 5px 6px;
     display: flex;
     align-items: center;
     user-select: none;

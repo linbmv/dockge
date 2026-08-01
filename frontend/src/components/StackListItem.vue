@@ -123,12 +123,12 @@ export default {
     text-decoration: none;
     display: flex;
     align-items: center;
-    min-height: 44px;
-    border-radius: var(--radius-lg);
-    transition: all var(--transition-fast);
+    min-height: 38px;
+    border-radius: 6px;
+    transition: background-color 120ms ease, border-color 120ms ease;
     width: 100%;
-    padding: 8px 10px;
-    margin-bottom: 4px;
+    padding: 6px 8px;
+    margin-bottom: 2px;
     background: transparent;
     border: 1px solid transparent;
     color: #cbd5e1;
@@ -138,20 +138,19 @@ export default {
     }
 
     &:hover {
-        background: rgba(255, 255, 255, 0.05);
+        background: #1a222c;
         color: #f8fafc;
-        transform: translateX(2px);
+        border-color: #2e3a48;
     }
 
     &.router-link-active, &.active {
-        background: rgba(56, 189, 248, 0.12);
-        border-color: rgba(56, 189, 248, 0.3);
-        color: #38bdf8;
+        background: #20394d;
+        border-color: #2f6388;
+        color: #8ed0f5;
         font-weight: 600;
-        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
 
         .title span {
-            color: #38bdf8;
+            color: #8ed0f5;
         }
     }
 

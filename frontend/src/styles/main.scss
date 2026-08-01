@@ -8,6 +8,16 @@
     font-family: var(--font-body);
 }
 
+// Dockge is an operations console, not a marketing page. Keep the default
+// controls dense so a stack can expose its state and actions in one viewport.
+:root {
+    --radius-sm: 0.25rem;
+    --radius-base: 0.375rem;
+    --radius-lg: 0.5rem;
+    --radius-xl: 0.625rem;
+    --radius-2xl: 0.75rem;
+}
+
 h1 {
     font-size: 32px;
 }
@@ -17,7 +27,7 @@ h2 {
 }
 
 textarea.form-control {
-    border-radius: 19px;
+    border-radius: 6px;
 }
 
 ::-webkit-scrollbar {
@@ -103,30 +113,34 @@ optgroup {
 
 .shadow-box {
     box-shadow: 0 15px 70px rgba(0, 0, 0, 0.1);
-    padding: 10px;
-    border-radius: 10px;
+    padding: 12px;
+    border-radius: 8px;
 
     &.big-padding {
-        padding: 20px;
+        padding: 14px;
     }
 }
 
 .btn {
-    padding-left: 20px;
-    padding-right: 20px;
+    min-height: 32px;
+    padding: 5px 11px;
+    border-radius: 6px;
+    font-size: 0.875rem;
 }
 
 .btn-sm {
-    border-radius: 25px;
+    min-height: 28px;
+    padding: 3px 8px;
+    border-radius: 5px;
 }
 
 .btn-primary {
     color: white;
-    background: $primary-gradient;
+    background: $primary;
 
     &:hover, &:active, &:focus, &.active {
         color: white;
-        background: $primary-gradient-active;
+        background: darken($primary, 7%);
         border-color: $highlight;
     }
 

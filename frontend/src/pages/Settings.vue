@@ -74,6 +74,9 @@ export default {
 
         subMenus() {
             return {
+                operations: {
+                    title: this.$t("managementTools"),
+                },
                 general: {
                     title: this.$t("general"),
                 },
@@ -112,7 +115,7 @@ export default {
          */
         loadGeneralPage() {
             if (!this.currentPage && !this.$root.isMobile) {
-                this.$router.push("/settings/appearance");
+                this.$router.push("/settings/operations");
             }
         },
 

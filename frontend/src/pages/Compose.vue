@@ -9,9 +9,21 @@
                 </span>
             </h1>
 
-            <div v-if="stack.isManagedByDockge" class="mb-3">
+            <div v-if="stack.isManagedByDockge" class="compose-toolbar mb-3">
                 <div class="btn-group me-2" role="group">
-                    <button v-if="isEditMode" class="btn btn-primary" :disabled="processing" @click="deployStack">
+                    <button
+                        v-if="isEditMode && !isAdd"
+                        class="btn btn-normal"
+                        :class="{ 'has-changes': hasUnsavedChanges }"
+                        :disabled="processing"
+                        :title="hasUnsavedChanges ? $t('confirmDiscardStack') : $t('cancelEdit')"
+                        @click="discardStack"
+                    >
+                        <font-awesome-icon icon="undo" class="me-1" />
+                        {{ $t("discardStack") }}<span v-if="hasUnsavedChanges" class="unsaved-mark">*</span>
+                    </button>
+
+                    <button v-if="isEditMode && isAdd" class="btn btn-primary" :disabled="processing" @click="deployStack">
                         <font-awesome-icon icon="rocket" class="me-1" />
                         {{ isAdd ? $t("createAndDeployStack") : $t("deployStack") }}
                     </button>
@@ -21,9 +33,35 @@
                         {{ isAdd ? $t("saveStackDraftOnly") : $t("saveStackDraft") }}
                     </button>
 
-                    <button v-if="!isEditMode" class="btn btn-secondary" :disabled="processing" @click="enableEditMode">
+                    <button
+                        v-if="!isEditMode"
+                        class="btn btn-secondary"
+                        :disabled="processing || !canEditStack"
+                        :title="canEditStack ? $t('editStack') : 'Stop the stack before editing files'"
+                        @click="enableEditMode"
+                    >
                         <font-awesome-icon icon="pen" class="me-1" />
                         {{ $t("editStack") }}
+                    </button>
+
+                    <router-link
+                        v-if="!isEditMode && primaryServiceActive && serviceNames.length === 1"
+                        class="btn btn-normal"
+                        :to="bashRouteLink"
+                    >
+                        <font-awesome-icon icon="terminal" class="me-1" />
+                        Bash
+                    </router-link>
+
+                    <button
+                        v-if="!isEditMode"
+                        class="btn btn-normal"
+                        :class="{ 'is-active': showTerminal }"
+                        :disabled="processing"
+                        @click="showTerminal = !showTerminal"
+                    >
+                        <font-awesome-icon icon="terminal" class="me-1" />
+                        {{ $t("terminal") }}
                     </button>
 
                     <button v-if="!isEditMode && !active" class="btn btn-primary" :disabled="processing" @click="startStack">
@@ -47,7 +85,7 @@
                     </button>
 
                     <button v-if="!isEditMode && active" class="btn btn-normal" :disabled="processing" @click="stopStack">
-                        <font-awesome-icon icon="stop" class="me-1" />
+                        <font-awesome-icon icon="pause" class="me-1" />
                         {{ $t("stopStack") }}
                     </button>
 
@@ -57,9 +95,13 @@
                             {{ $t("downStack") }}
                         </BDropdownItem>
                     </BDropdown>
+
+                    <button v-if="isEditMode && !isAdd" class="btn btn-primary" :disabled="processing" @click="deployStack">
+                        <font-awesome-icon icon="rocket" class="me-1" />
+                        {{ $t("deployStack") }}
+                    </button>
                 </div>
 
-                <button v-if="isEditMode && !isAdd" class="btn btn-normal" :disabled="processing" @click="discardStack">{{ $t("discardStack") }}</button>
                 <button v-if="!isEditMode" class="btn btn-danger" :disabled="processing" @click="showDeleteDialog = !showDeleteDialog">
                     <font-awesome-icon icon="trash" class="me-1" />
                     {{ $t("deleteStack") }}
@@ -278,7 +320,7 @@
                     </div>
 
                     <!-- Combined Terminal Output -->
-                    <div v-show="!isEditMode">
+                    <div v-if="showTerminal && !isEditMode">
                         <h4 class="mb-3">{{ $t("terminal") }}</h4>
                         <Terminal
                             ref="combinedTerminal"
@@ -291,11 +333,11 @@
                         ></Terminal>
                     </div>
                 </div>
-                <div class="col-lg-6">
+                <div v-if="isEditMode" class="col-lg-6">
                     <h4 class="mb-3">{{ stack.composeFileName }}</h4>
 
                     <!-- YAML editor -->
-                    <div class="shadow-box mb-3 editor-box" :class="{'edit-mode' : isEditMode}">
+                    <div class="shadow-box mb-3 editor-box edit-mode">
                         <code-mirror
                             ref="editor"
                             v-model="stack.composeYAML"
@@ -310,14 +352,14 @@
                             @change="yamlCodeChange"
                         />
                     </div>
-                    <div v-if="isEditMode" class="mb-3">
+                    <div v-if="yamlError" class="mb-3">
                         {{ yamlError }}
                     </div>
 
                     <!-- ENV editor -->
-                    <div v-if="isEditMode">
+                    <div>
                         <h4 class="mb-3">.env</h4>
-                        <div class="shadow-box mb-3 editor-box" :class="{'edit-mode' : isEditMode}">
+                        <div class="shadow-box mb-3 editor-box edit-mode">
                             <code-mirror
                                 ref="editor"
                                 v-model="stack.composeENV"
@@ -529,8 +571,7 @@ import {
     copyYAMLComments, envsubstYAML,
     getCombinedTerminalName,
     getComposeTerminalName,
-    PROGRESS_TERMINAL_ROWS,
-    RUNNING
+    PROGRESS_TERMINAL_ROWS
 } from "../../../common/util-common";
 import { BModal } from "bootstrap-vue-next";
 import NetworkInput from "../components/NetworkInput.vue";
@@ -606,6 +647,7 @@ export default {
             yamlError: "",
             processing: true,
             showProgressTerminal: false,
+            showTerminal: false,
             progressTerminalRows: PROGRESS_TERMINAL_ROWS,
             combinedTerminalRows: COMBINED_TERMINAL_ROWS,
             combinedTerminalCols: COMBINED_TERMINAL_COLS,
@@ -626,6 +668,7 @@ export default {
             serviceStatusList: {},
             dockerStats: {},
             isEditMode: false,
+            savedStackSnapshot: null,
             submitted: false,
             showDeleteDialog: false,
             showBindMountSetupDialog: false,
@@ -728,7 +771,67 @@ export default {
         },
 
         active() {
-            return this.status === RUNNING;
+            return this.stackHasRunningService || [ "running", "healthy", "unhealthy" ].includes(this.status);
+        },
+
+        hasUnsavedChanges() {
+            if (!this.savedStackSnapshot) {
+                return false;
+            }
+            return (this.stack.composeYAML || "") !== this.savedStackSnapshot.composeYAML
+                || (this.stack.composeENV || "") !== this.savedStackSnapshot.composeENV;
+        },
+
+        stackHasRunningService() {
+            return this.serviceNames.some(name => this.serviceStatusList[name]?.some(service => (
+                service && [ "running", "healthy", "unhealthy" ].includes(service.status)
+            )));
+        },
+
+        primaryServiceActive() {
+            const serviceName = this.serviceNames[0];
+            return Boolean(serviceName && this.serviceStatusList[serviceName]?.some(service => (
+                service && [ "running", "healthy", "unhealthy" ].includes(service.status)
+            )));
+        },
+
+        canEditStack() {
+            if (this.isAdd) {
+                return true;
+            }
+            if (this.stackHasRunningService) {
+                return false;
+            }
+            if (!this.status) {
+                return false;
+            }
+            return ![ "running", "healthy", "unhealthy", "starting", "restarting", "paused" ].includes(this.status);
+        },
+
+        bashRouteLink() {
+            const serviceName = this.serviceNames[0];
+            if (!serviceName) {
+                return { name: "containerTerminal" };
+            }
+            if (this.endpoint) {
+                return {
+                    name: "containerTerminalEndpoint",
+                    params: {
+                        endpoint: this.endpoint,
+                        stackName: this.stack.name,
+                        serviceName,
+                        type: "bash",
+                    },
+                };
+            }
+            return {
+                name: "containerTerminal",
+                params: {
+                    stackName: this.stack.name,
+                    serviceName,
+                    type: "bash",
+                },
+            };
         },
 
         canPrepareBindMounts() {
@@ -812,6 +915,7 @@ export default {
         }
     },
     async mounted() {
+        window.addEventListener("keydown", this.handleEscapeKey, true);
         this.stackDefaults = await this.getStackDefaults();
 
         if (this.isAdd) {
@@ -859,9 +963,17 @@ export default {
         this.requestDockerStats();
     },
     unmounted() {
-
+        window.removeEventListener("keydown", this.handleEscapeKey, true);
     },
     methods: {
+        handleEscapeKey(event) {
+            if (event.key !== "Escape" || this.showDeleteDialog || this.showBindMountSetupDialog) {
+                return;
+            }
+            event.preventDefault();
+            this.$router.push("/");
+        },
+
         selectCreationSource(source) {
             this.creationSource = source;
             if (source === "compose") {
@@ -1090,6 +1202,7 @@ export default {
             this.processing = false;
             this.$root.toastRes(res);
             if (res.ok) {
+                this.captureStackSnapshot();
                 this.isEditMode = false;
                 this.$router.push(this.url);
             }
@@ -1388,7 +1501,7 @@ export default {
         },
 
         exitConfirm(next) {
-            if (this.isEditMode) {
+            if (this.isEditMode && this.hasUnsavedChanges) {
                 if (confirm(this.$t("confirmLeaveStack"))) {
                     this.exitAction();
                     next();
@@ -1423,6 +1536,7 @@ export default {
                 if (res.ok) {
                     this.stack = res.stack;
                     this.yamlCodeChange();
+                    this.$nextTick(() => this.captureStackSnapshot());
                     this.processing = false;
                     this.bindTerminal();
                 } else {
@@ -1620,7 +1734,13 @@ export default {
         },
 
         discardStack() {
-            this.loadStack();
+            const hasChanges = this.hasUnsavedChanges;
+            if (hasChanges && !confirm(this.$t("confirmDiscardStack"))) {
+                return;
+            }
+            if (hasChanges) {
+                this.loadStack();
+            }
             this.isEditMode = false;
         },
 
@@ -1689,7 +1809,18 @@ export default {
         },
 
         enableEditMode() {
+            if (!this.canEditStack) {
+                this.$root.toastError("Stop the stack before editing files.");
+                return;
+            }
             this.isEditMode = true;
+        },
+
+        captureStackSnapshot() {
+            this.savedStackSnapshot = {
+                composeYAML: this.stack.composeYAML || "",
+                composeENV: this.stack.composeENV || "",
+            };
         },
 
         checkYAML() {
@@ -1782,65 +1913,64 @@ export default {
 
 h1 {
     font-family: var(--font-display);
-    font-size: var(--text-3xl);
-    font-weight: 600;
-    letter-spacing: var(--tracking-tight);
-    margin-bottom: var(--space-6);
-    background: linear-gradient(135deg, $accent-primary 0%, $accent-support 100%);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
+    font-size: 1.55rem;
+    font-weight: 650;
+    letter-spacing: normal;
+    margin-bottom: 0.75rem;
+    color: $text-primary;
+}
+
+h1 :deep(.badge) {
+    min-width: 0;
+    padding: 5px 10px;
+    border-radius: 999px;
+    font-size: 0.72rem;
+    line-height: 1;
+    vertical-align: middle;
 }
 
 h4 {
     font-family: var(--font-display);
-    font-size: var(--text-lg);
+    font-size: 1rem;
     font-weight: 600;
     color: $text-primary;
-    margin-bottom: var(--space-4);
-    letter-spacing: var(--tracking-tight);
+    margin-bottom: 0.75rem;
+    letter-spacing: normal;
 }
 
 // Enhanced shadow-box
 .shadow-box {
     background: $surface-raised;
     border: 1px solid $border-subtle;
-    border-radius: var(--radius-xl);
-    padding: var(--space-6);
-    box-shadow: var(--shadow-base);
-    transition: all var(--transition-base);
+    border-radius: 8px;
+    padding: 14px;
+    box-shadow: none;
+    transition: border-color 120ms ease, background-color 120ms ease;
 
     &:hover {
         border-color: $border-default;
-        box-shadow: var(--shadow-md);
     }
 
     &.big-padding {
-        padding: var(--space-8);
+        padding: 16px;
     }
 }
 
 // Button enhancements
 .btn {
-    border-radius: var(--radius-pill);
+    min-height: 32px;
+    border-radius: 6px;
     font-weight: 500;
-    padding: var(--space-3) var(--space-5);
-    transition: all var(--transition-fast);
-    border: none;
+    padding: 5px 11px;
+    transition: background-color 120ms ease, border-color 120ms ease, color 120ms ease;
+    border: 1px solid transparent;
 
     &.btn-primary {
-        background: $accent-primary;
+        background: #2da7d8;
         color: $surface-deepest;
-        box-shadow: var(--glow-cyan);
 
         &:hover:not(:disabled) {
-            background: $accent-primary-hover;
-            box-shadow: 0 0 30px rgba(56, 189, 248, 0.5);
-            transform: translateY(-1px);
-        }
-
-        &:active {
-            transform: translateY(0);
+            background: #47b8e3;
         }
     }
 
@@ -1873,7 +2003,6 @@ h4 {
 
         &:hover:not(:disabled) {
             background: darken($accent-danger, 5%);
-            box-shadow: 0 0 20px rgba(239, 68, 68, 0.4);
         }
     }
 
@@ -1887,11 +2016,11 @@ h4 {
 .form-control, .form-select {
     background: $surface-elevated;
     border: 1px solid $border-default;
-    border-radius: var(--radius-lg);
+    border-radius: 6px;
     color: $text-primary;
-    padding: var(--space-3) var(--space-4);
+    padding: 7px 10px;
     transition: all var(--transition-fast);
-    font-size: var(--text-base);
+    font-size: 0.875rem;
 
     &::placeholder {
         color: $text-muted;
@@ -1908,10 +2037,10 @@ h4 {
 .form-label {
     color: $text-secondary;
     font-weight: 500;
-    font-size: var(--text-sm);
-    margin-bottom: var(--space-2);
-    letter-spacing: var(--tracking-wide);
-    text-transform: uppercase;
+    font-size: 0.78rem;
+    margin-bottom: 0.4rem;
+    letter-spacing: normal;
+    text-transform: none;
 }
 
 .form-text {
@@ -1962,11 +2091,11 @@ h4 {
 
     .form-control {
         flex: 1;
-        border-radius: var(--radius-lg);
+        border-radius: 6px;
     }
 
     .btn {
-        border-radius: var(--radius-pill);
+        border-radius: 6px;
     }
 }
 
@@ -1975,10 +2104,10 @@ h4 {
     height: 200px;
     background: $surface-deep;
     border: 1px solid $border-subtle;
-    border-radius: var(--radius-xl);
-    padding: var(--space-4);
+    border-radius: 8px;
+    padding: 12px;
     font-family: var(--font-mono);
-    box-shadow: var(--shadow-base);
+    box-shadow: none;
 }
 
 // Editor box
@@ -1987,14 +2116,13 @@ h4 {
     font-size: var(--text-sm);
     background: $surface-deep;
     border: 1px solid $border-subtle;
-    border-radius: var(--radius-xl);
+    border-radius: 8px;
     overflow: hidden;
-    box-shadow: var(--shadow-base);
-    transition: all var(--transition-base);
+    box-shadow: none;
+    transition: border-color 120ms ease;
 
     &.edit-mode {
         border-color: $accent-primary;
-        box-shadow: var(--glow-cyan);
     }
 
     &:hover {
@@ -2008,8 +2136,8 @@ h4 {
     font-size: var(--text-sm);
     background: $surface-elevated;
     border: 2px dashed $border-default;
-    border-radius: var(--radius-xl);
-    padding: var(--space-6);
+    border-radius: 8px;
+    padding: 14px;
     min-height: 200px;
     color: $text-secondary;
     transition: all var(--transition-base);
@@ -2017,7 +2145,6 @@ h4 {
     &:focus-within {
         border-color: $accent-primary;
         border-style: solid;
-        box-shadow: var(--glow-cyan);
         background: $surface-raised;
     }
 
@@ -2116,13 +2243,120 @@ h4 {
 }
 
 // Button group
+.compose-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    max-width: 100%;
+
+    > .btn-group {
+        flex: 1 1 640px;
+        min-width: 0;
+        max-width: 100%;
+    }
+
+    > .btn {
+        flex: 0 0 auto;
+        width: auto;
+    }
+
+    .btn.is-active {
+        color: #c9f3ff;
+        border-color: rgba(56, 189, 248, 0.65);
+        background: rgba(14, 116, 144, 0.35);
+    }
+
+    .btn.has-changes {
+        color: #fbd38d;
+        border-color: rgba(245, 158, 11, 0.55);
+        background: rgba(120, 73, 10, 0.25);
+    }
+}
+
+.unsaved-mark {
+    margin-left: 3px;
+    color: #f59e0b;
+    font-weight: 700;
+}
+
+.edit-lock-hint {
+    align-self: center;
+    color: $text-muted;
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+}
+
+.stack-files-panel {
+    min-height: 170px;
+    padding: 16px;
+    background:
+        linear-gradient(135deg, rgba(56, 189, 248, 0.06), transparent 42%),
+        $surface-raised;
+    border-color: rgba(56, 189, 248, 0.2);
+}
+
+.stack-files-heading,
+.stack-file-row {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+}
+
+.stack-files-heading {
+    color: $text-primary;
+    font-size: 0.82rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+
+.stack-files-state {
+    margin-left: auto;
+    color: #67e8f9;
+    font-family: var(--font-mono);
+    font-size: 0.62rem;
+    font-weight: 500;
+}
+
+.stack-file-row {
+    margin-top: 14px;
+    padding: 9px 10px;
+    color: $text-muted;
+    border: 1px solid $border-subtle;
+    border-radius: 6px;
+    background: rgba(8, 13, 20, 0.35);
+
+    code {
+        flex: 1;
+        overflow: hidden;
+        color: $text-primary;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    span {
+        color: $text-muted;
+        font-family: var(--font-mono);
+        font-size: 0.64rem;
+    }
+}
+
+.stack-files-note {
+    margin-top: 14px;
+    color: $text-muted;
+    font-size: 0.75rem;
+}
+
 .btn-group {
     display: flex;
-    gap: var(--space-2);
+    gap: 6px;
     flex-wrap: wrap;
+    min-width: 0;
 
     .btn {
-        border-radius: var(--radius-pill) !important;
+        flex: 0 1 auto;
+        border-radius: 6px !important;
     }
 }
 
@@ -2130,7 +2364,7 @@ h4 {
 div[ref="containerList"] {
     display: flex;
     flex-direction: column;
-    gap: var(--space-3);
+    gap: 8px;
 }
 
 // Animations
