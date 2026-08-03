@@ -383,20 +383,35 @@
                             <div class="form-text mb-3">{{ $t("networkAndPortPresetsHelp") }}</div>
 
                             <div v-if="stackDefaults.defaultExternalNetwork" class="mb-3">
-                                <button
-                                    class="btn btn-normal me-2"
-                                    :disabled="pendingNetworkServices.length === 0"
-                                    @click="applyNetworkPreset"
-                                >
-                                    {{ $t("joinSharedNetwork", [ stackDefaults.defaultExternalNetwork ]) }}
-                                </button>
-                                <span v-if="pendingNetworkServices.length > 0" class="form-text">
-                                    {{ $t("joinSharedNetworkPending", [ pendingNetworkServices.join(", ") ]) }}
-                                </span>
-                                <span v-else class="form-text">{{ $t("joinSharedNetworkDone") }}</span>
+                                <template v-if="!stackDefaults.defaultExternalNetworkExists">
+                                    <button
+                                        class="btn btn-warning me-2"
+                                        :disabled="creatingExternalNetwork"
+                                        @click="createDefaultExternalNetwork"
+                                    >
+                                        <span v-if="creatingExternalNetwork" class="spinner-border spinner-border-sm me-1"></span>
+                                        {{ $t("createAndJoinSharedNetwork", [ stackDefaults.defaultExternalNetwork ]) }}
+                                    </button>
+                                    <span class="form-text text-warning">
+                                        {{ $t("sharedNetworkMissing", [ stackDefaults.defaultExternalNetwork ]) }}
+                                    </span>
+                                </template>
+                                <template v-else>
+                                    <button
+                                        class="btn btn-normal me-2"
+                                        :disabled="pendingNetworkServices.length === 0"
+                                        @click="applyNetworkPreset"
+                                    >
+                                        {{ $t("joinSharedNetwork", [ stackDefaults.defaultExternalNetwork ]) }}
+                                    </button>
+                                    <span v-if="pendingNetworkServices.length > 0" class="form-text">
+                                        {{ $t("joinSharedNetworkPending", [ pendingNetworkServices.join(", ") ]) }}
+                                    </span>
+                                    <span v-else class="form-text">{{ $t("joinSharedNetworkDone") }}</span>
+                                </template>
                             </div>
 
-                            <div>
+                            <div class="mb-3">
                                 <button
                                     class="btn btn-normal me-2"
                                     :disabled="allocatingPorts || portPreset.rewritable.length === 0 || !stackDefaults.publishedHostIPValue"
@@ -425,6 +440,78 @@
                                         <span class="ms-1">({{ $t("portPresetSkip_" + entry.skipReason) }})</span>
                                     </li>
                                 </ul>
+                            </div>
+
+                            <div class="manual-port-preset">
+                                <div class="form-text mb-2">{{ $t("manualPortMappingHelp") }}</div>
+                                <div class="row g-2 align-items-end">
+                                    <div class="col-12 col-md-3">
+                                        <label class="form-label" for="manual-port-service">{{ $t("service") }}</label>
+                                        <select id="manual-port-service" v-model="manualPortService" class="form-select" :disabled="serviceNames.length === 0">
+                                            <option value="" disabled>{{ $t("selectService") }}</option>
+                                            <option v-for="serviceName in serviceNames" :key="serviceName" :value="serviceName">
+                                                {{ serviceName }}
+                                            </option>
+                                        </select>
+                                    </div>
+                                    <div class="col-6 col-md-2">
+                                        <label class="form-label" for="manual-published-port">{{ $t("publishedHostPort") }}</label>
+                                        <input
+                                            id="manual-published-port"
+                                            v-model.number="manualPublishedPort"
+                                            class="form-control"
+                                            type="number"
+                                            min="1"
+                                            max="65535"
+                                            :placeholder="`${stackDefaults.publishedPortStart}`"
+                                        />
+                                    </div>
+                                    <div class="col-6 col-md-2">
+                                        <label class="form-label" for="manual-target-port">{{ $t("containerTargetPort") }}</label>
+                                        <input
+                                            id="manual-target-port"
+                                            v-model.number="manualTargetPort"
+                                            class="form-control"
+                                            type="number"
+                                            min="1"
+                                            max="65535"
+                                            placeholder="8080"
+                                            @keyup.enter="addManualPortMapping"
+                                        />
+                                    </div>
+                                    <div class="col-6 col-md-2">
+                                        <label class="form-label" for="manual-port-protocol">{{ $t("publishedPortProtocol") }}</label>
+                                        <select id="manual-port-protocol" v-model="manualPortProtocol" class="form-select">
+                                            <option value="tcp">TCP</option>
+                                            <option value="udp">UDP</option>
+                                        </select>
+                                    </div>
+                                    <div class="col-6 col-md-3 d-flex gap-2">
+                                        <button
+                                            class="btn btn-normal ts-host-ip-button"
+                                            :class="{ 'is-active': manualUseTailnetIP }"
+                                            :disabled="!stackDefaults.publishedHostIPValue"
+                                            :title="$t('publishedHostIPVariableHelp', [ stackDefaults.publishedHostIPVariable ])"
+                                            @click="manualUseTailnetIP = true"
+                                        >
+                                            {{ stackDefaults.publishedHostIPVariable }}
+                                        </button>
+                                        <button
+                                            class="btn btn-primary flex-grow-1"
+                                            :disabled="allocatingPorts || !manualPortServiceName || !manualTargetPort || !manualUseTailnetIP || !stackDefaults.publishedHostIPValue"
+                                            @click="addManualPortMapping"
+                                        >
+                                            <span v-if="allocatingPorts" class="spinner-border spinner-border-sm me-1"></span>
+                                            {{ $t("addPortMapping") }}
+                                        </button>
+                                    </div>
+                                </div>
+                                <div class="form-text mt-2">
+                                    {{ $t("manualPortMappingRange", [ stackDefaults.publishedPortStart, stackDefaults.publishedPortEnd, stackDefaults.publishedHostIPVariable ]) }}
+                                </div>
+                                <div v-if="!stackDefaults.publishedHostIPValue" class="form-text text-warning mt-2">
+                                    {{ $t("publishedHostIPMissing", [ stackDefaults.publishedHostIPVariable ]) }}
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -579,6 +666,7 @@ import dotenv from "dotenv";
 import { ref } from "vue";
 import { resolveRequiredEnvironmentVariable } from "../../../common/published-port";
 import {
+    appendPublishedPortToDoc,
     applyDefaultExternalNetworkToDoc,
     applyPortRewritesToDoc,
     getRelativeBuildContexts,
@@ -656,6 +744,7 @@ export default {
             },
             stackDefaults: {
                 defaultExternalNetwork: "",
+                defaultExternalNetworkExists: false,
                 publishedHostIPVariable: "TS_HOST_IP",
                 publishedHostIPValue: "",
                 publishedPortStart: 20000,
@@ -679,6 +768,12 @@ export default {
             stopServiceStatusTimeout: false,
             stopDockerStatsTimeout: false,
             allocatingPorts: false,
+            creatingExternalNetwork: false,
+            manualPortService: "",
+            manualPublishedPort: "",
+            manualTargetPort: "",
+            manualPortProtocol: "tcp",
+            manualUseTailnetIP: true,
             creationSource: "compose",
             localProjectSource: "server",
             serverProjectPath: "",
@@ -732,6 +827,12 @@ export default {
                 return [];
             }
             return Object.keys(this.jsonConfig.services);
+        },
+
+        manualPortServiceName() {
+            return this.serviceNames.includes(this.manualPortService)
+                ? this.manualPortService
+                : this.serviceNames[0] || "";
         },
 
         relativeBuildContexts() {
@@ -889,6 +990,15 @@ export default {
                 }
             },
             deep: true,
+        },
+
+        serviceNames: {
+            handler(names) {
+                if (!names.includes(this.manualPortService)) {
+                    this.manualPortService = names[0] || "";
+                }
+            },
+            immediate: true,
         },
 
         jsonConfig: {
@@ -1294,6 +1404,7 @@ export default {
                         }
                         resolve({
                             defaultExternalNetwork: "",
+                            defaultExternalNetworkExists: false,
                             publishedHostIPVariable: "TS_HOST_IP",
                             publishedHostIPValue: "",
                             publishedPortStart: 20000,
@@ -1334,6 +1445,31 @@ export default {
             }
         },
 
+        async createDefaultExternalNetwork() {
+            const networkName = this.stackDefaults.defaultExternalNetwork;
+            if (!networkName || this.creatingExternalNetwork) {
+                return;
+            }
+            if (!confirm(this.$t("confirmCreateDefaultExternalNetwork", [ networkName ]))) {
+                return;
+            }
+
+            this.creatingExternalNetwork = true;
+            this.$root.emitAgent(this.endpoint, "ensureDefaultExternalNetwork", (res) => {
+                this.creatingExternalNetwork = false;
+                if (!res?.ok) {
+                    if (res) {
+                        this.$root.toastRes(res);
+                    }
+                    return;
+                }
+
+                this.stackDefaults.defaultExternalNetworkExists = true;
+                this.$root.toastSuccess(this.$t("sharedNetworkCreated", [ networkName ]));
+                this.applyNetworkPreset();
+            });
+        },
+
         /**
          * Run a preset against the YAML document itself, then push the result
          * back into the editor. Going through the document rather than
@@ -1365,8 +1501,11 @@ export default {
             );
             if (attached > 0) {
                 this.$root.toastSuccess(this.$t("networkPresetApplied", [ attached ]));
-                await this.allocateInternalIPs();
             }
+            // Also allocate when services were already attached but did not yet
+            // have fixed addresses. The allocator selects the first free IP in
+            // the D_Home subnet (starting at the ComposeMgt-compatible range).
+            await this.allocateInternalIPs();
         },
 
         allocateInternalIPs() {
@@ -1449,12 +1588,74 @@ export default {
                             doc,
                             plan,
                             res.allocations,
-                            this.stackDefaults.publishedHostIPVariable
+                            this.stackDefaults.publishedHostIPVariable,
+                            this.stackDefaults.publishedHostIPValue
                         )
                     );
                     if (changed > 0) {
                         this.$root.toastSuccess(this.$t("portPresetApplied", [ changed ]));
                     }
+                }
+            );
+        },
+
+        addManualPortMapping() {
+            const serviceName = this.manualPortServiceName;
+            const targetPort = Number(this.manualTargetPort);
+            const requestedPublishedPort = this.manualPublishedPort === ""
+                || this.manualPublishedPort === null
+                || this.manualPublishedPort === undefined
+                ? undefined
+                : Number(this.manualPublishedPort);
+
+            if (!serviceName) {
+                this.$root.toastError(this.$t("selectService"));
+                return;
+            }
+            if (!Number.isInteger(targetPort) || targetPort < 1 || targetPort > 65535) {
+                this.$root.toastError(this.$t("invalidContainerTargetPort"));
+                return;
+            }
+            if (requestedPublishedPort !== undefined && (!Number.isInteger(requestedPublishedPort) || requestedPublishedPort < 1 || requestedPublishedPort > 65535)) {
+                this.$root.toastError(this.$t("invalidPublishedHostPort"));
+                return;
+            }
+            if (!this.manualUseTailnetIP || !this.stackDefaults.publishedHostIPValue) {
+                this.$root.toastError(this.$t("publishedHostIPMissing", [ this.stackDefaults.publishedHostIPVariable ]));
+                return;
+            }
+
+            this.allocatingPorts = true;
+            this.$root.emitAgent(
+                this.endpoint,
+                "allocatePublishedPort",
+                targetPort,
+                this.manualPortProtocol,
+                this.collectCurrentEditorPorts(),
+                requestedPublishedPort,
+                (res) => {
+                    this.allocatingPorts = false;
+                    if (!res?.ok || !res.allocation?.mapping) {
+                        if (res) {
+                            this.$root.toastRes(res);
+                        }
+                        return;
+                    }
+
+                    const changed = this.applyPresetToDocument(
+                        doc => appendPublishedPortToDoc(doc, serviceName, res.allocation.mapping)
+                    );
+                    if (changed === 0) {
+                        this.$root.toastError(this.$t("publishedPortListInvalid"));
+                        return;
+                    }
+
+                    this.$root.toastSuccess(this.$t("publishedPortAllocated", [
+                        res.allocation.publishedPort,
+                        targetPort,
+                    ]));
+                    this.manualPublishedPort = "";
+                    this.manualTargetPort = "";
                 }
             );
         },
@@ -2170,6 +2371,12 @@ h4 {
             color: $text-primary;
         }
     }
+}
+
+.ts-host-ip-button.is-active {
+    color: #c9f3ff;
+    border-color: rgba(56, 189, 248, 0.65);
+    background: rgba(14, 116, 144, 0.35);
 }
 
 // Agent name badge

@@ -182,6 +182,14 @@ function parseTargetPort(value : unknown) : number {
     return targetPort;
 }
 
+function parsePublishedPort(value : unknown) : number {
+    const publishedPort = Number(value);
+    if (!Number.isInteger(publishedPort) || publishedPort < 1 || publishedPort > 65535) {
+        throw new ValidationError("Published port must be an integer from 1 to 65535.");
+    }
+    return publishedPort;
+}
+
 function parseProtocolValue(value : unknown) : PublishedPortProtocol {
     if (value !== "tcp" && value !== "udp") {
         throw new ValidationError("Protocol must be tcp or udp.");
@@ -214,11 +222,31 @@ function takeNextPort(
     return publishedPort;
 }
 
+function takeRequestedPort(
+    publishedPortValue : unknown,
+    protocol : PublishedPortProtocol,
+    used : Set<string>,
+    reserved : Map<string, number>
+) : number {
+    const publishedPort = parsePublishedPort(publishedPortValue);
+    const key = publishedPortKey(publishedPort, protocol);
+    if (used.has(key) || reserved.has(key)) {
+        throw new ValidationError(
+            `Published ${protocol.toUpperCase()} port ${publishedPort} is already in use.`
+        );
+    }
+
+    reserved.set(key, Date.now());
+    used.add(key);
+    return publishedPort;
+}
+
 export async function allocatePublishedPort(
     server : DockgeServer,
     targetPortValue : unknown,
     protocolValue : unknown,
-    currentEditorPorts : unknown
+    currentEditorPorts : unknown,
+    requestedPublishedPortValue ?: unknown
 ) : Promise<PublishedPortAllocation> {
     const targetPort = parseTargetPort(targetPortValue);
     const protocol = parseProtocolValue(protocolValue);
@@ -228,7 +256,10 @@ export async function allocatePublishedPort(
     requireHostIP(server);
 
     const used = await collectUsedPorts(server, currentEditorPorts);
-    const publishedPort = takeNextPort(server, protocol, used, activeReservations(server));
+    const reserved = activeReservations(server);
+    const publishedPort = requestedPublishedPortValue === undefined || requestedPublishedPortValue === ""
+        ? takeNextPort(server, protocol, used, reserved)
+        : takeRequestedPort(requestedPublishedPortValue, protocol, used, reserved);
 
     return {
         publishedPort,
@@ -238,7 +269,8 @@ export async function allocatePublishedPort(
             server.config.publishedHostIPVariable,
             publishedPort,
             targetPort,
-            protocol
+            protocol,
+            server.getPublishedHostIPValue()
         ),
     };
 }

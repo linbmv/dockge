@@ -106,8 +106,8 @@ export async function copyServerProject(
     stackName : string,
     requestedPath : string
 ) : Promise<ServerProjectPreview> {
-    if (!stackName.match(/^[a-z0-9_-]+$/)) {
-        throw new ValidationError("Stack name can only contain [a-z][0-9] _ - only");
+    if (!stackName.match(/^[a-zA-Z0-9_-]+$/)) {
+        throw new ValidationError("Stack name can only contain [a-z][A-Z][0-9] _ - only");
     }
 
     const preview = await inspectServerProject(projectsDir, requestedPath);

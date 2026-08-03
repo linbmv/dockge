@@ -47,9 +47,12 @@
                 <div class="stack-card-main">
                     <div class="stack-identity">
                         <div class="stack-name-row">
-                            <router-link :to="stackUrl(stack)" class="stack-card-name">
-                                {{ stack.name }} <font-awesome-icon icon="chevron-circle-right" />
-                            </router-link>
+                            <div class="stack-name-copy">
+                                <small>STACK</small>
+                                <router-link :to="stackUrl(stack)" class="stack-card-name">
+                                    {{ stack.name }} <font-awesome-icon icon="chevron-circle-right" />
+                                </router-link>
+                            </div>
                             <span class="stack-state"><span class="state-dot"></span>{{ $t(statusName(stack)) }}</span>
                         </div>
                         <div class="stack-runtime">
@@ -66,12 +69,23 @@
                         class="stack-telemetry"
                         :class="{ loading: !summary.loaded }"
                     >
-                        <span class="telemetry-live"><span></span> LIVE</span>
-                        <div class="telemetry-item telemetry-containers">
+                        <span class="telemetry-live">
+                            <span class="telemetry-live-dot"></span>
+                            LIVE
+                            <strong>{{ summary.containers }}</strong>
+                        </span>
+                        <div class="telemetry-item telemetry-targets" :title="summary.containerTitle">
                             <font-awesome-icon icon="boxes-stacked" />
                             <span>
-                                <small>CONTAINERS</small>
-                                <strong>{{ summary.containers }}</strong>
+                                <small>{{ $t("actualContainer") }}</small>
+                                <strong>{{ summary.containerDisplay }}</strong>
+                            </span>
+                        </div>
+                        <div class="telemetry-item telemetry-ip" :title="summary.internalIPTitle">
+                            <font-awesome-icon icon="network-wired" />
+                            <span>
+                                <small>{{ summary.internalIPLabel }}</small>
+                                <strong>{{ summary.internalIPDisplay }}</strong>
                             </span>
                         </div>
                         <div class="telemetry-item telemetry-cpu">
@@ -92,7 +106,26 @@
                             <font-awesome-icon icon="network-wired" />
                             <span>
                                 <small>PORTS</small>
-                                <strong>{{ summary.ports }}</strong>
+                                <span class="telemetry-port-list">
+                                    <template v-if="summary.portEntries.length > 0">
+                                        <a
+                                            v-for="port in summary.portEntries.slice(0, 2)"
+                                            :key="port.key"
+                                            class="telemetry-port-link"
+                                            :href="port.url"
+                                            :title="port.title"
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                        >
+                                            <strong>{{ port.display }}</strong>
+                                            <font-awesome-icon icon="external-link-square-alt" />
+                                        </a>
+                                        <strong v-if="summary.portEntries.length > 2" class="telemetry-port-more">
+                                            +{{ summary.portEntries.length - 2 }}
+                                        </strong>
+                                    </template>
+                                    <strong v-else>—</strong>
+                                </span>
                             </span>
                         </div>
                     </div>
@@ -143,7 +176,8 @@
                             type="button"
                             class="btn btn-xs stack-action action-restart"
                             :disabled="isProcessing(stack) || !stack.isManagedByDockge"
-                            @click="runStackAction(stack, 'restartStack')"
+                            :title="stackActionTitle(stack)"
+                            @click="confirmAndRunStackAction(stack, 'restartStack')"
                         >
                             <font-awesome-icon icon="rotate" /> {{ $t("restartStack") }}
                         </button>
@@ -153,10 +187,10 @@
                         <button v-if="stack.isGitRepository" type="button" class="btn btn-xs stack-action action-build" :disabled="isProcessing(stack)" @click="runStackAction(stack, 'gitPullAndBuildStack')">
                             <font-awesome-icon icon="wrench" /> {{ $t("gitPullAndBuildStack") }}
                         </button>
-                        <button v-if="isActive(stack)" type="button" class="btn btn-xs stack-action action-stop" :disabled="isProcessing(stack)" @click="runStackAction(stack, 'stopStack')">
+                        <button v-if="isActive(stack)" type="button" class="btn btn-xs stack-action action-stop" :disabled="isProcessing(stack)" :title="stackActionTitle(stack)" @click="confirmAndRunStackAction(stack, 'stopStack')">
                             <font-awesome-icon icon="pause" /> {{ $t("stopStack") }}
                         </button>
-                        <button type="button" class="btn btn-xs stack-action action-down" :disabled="isProcessing(stack) || !stack.isManagedByDockge" @click="runStackAction(stack, 'downStack')">
+                        <button type="button" class="btn btn-xs stack-action action-down" :disabled="isProcessing(stack) || !stack.isManagedByDockge" :title="stackActionTitle(stack)" @click="confirmAndRunStackAction(stack, 'downStack')">
                             <font-awesome-icon icon="stop" /> {{ $t("downStack") }}
                         </button>
                     </div>
@@ -302,6 +336,7 @@ import {
     getContainerExecTerminalName,
     statusNameShort
 } from "../../../common/util-common";
+import { extractStackRuntimeTargets } from "../../../common/stack-runtime";
 import Terminal from "./Terminal.vue";
 import Uptime from "./Uptime.vue";
 
@@ -530,6 +565,13 @@ export default {
                     memory: "—",
                     ports: "—",
                     portTitle: "",
+                    portEntries: [],
+                    targetEntries: [],
+                    containerDisplay: "—",
+                    containerTitle: "",
+                    internalIPDisplay: "—",
+                    internalIPTitle: "",
+                    internalIPLabel: this.$t("internalIP"),
                 };
             }
             const statusList = this.serviceStatusByStack[key];
@@ -540,15 +582,40 @@ export default {
             const stats = statuses.map(status => endpointStats[status?.name]).filter(Boolean);
             const cpuTotal = stats.reduce((totalCPU, stat) => totalCPU + this.parsePercentage(stat.CPUPerc), 0);
             const memoryTotal = stats.reduce((totalMemory, stat) => totalMemory + this.parseMemoryUsage(stat.MemUsage), 0);
-            const ports = this.extractPublishedPorts(statuses);
+            const portEntries = this.extractPublishedPorts(statuses, stack);
+            const targetEntries = extractStackRuntimeTargets(statuses);
+            const containerSummary = this.compactValues(targetEntries.map(target => target.name));
+            const internalIPTargets = targetEntries.filter(target => target.internalIP);
+            const internalIPSummary = this.compactValues(internalIPTargets.map(target => target.internalIP));
+            const internalNetworks = [ ...new Set(internalIPTargets.map(target => target.internalNetwork).filter(Boolean)) ];
             return {
                 key: `runtime-${key}`,
                 loaded: statusList !== undefined,
                 containers: `${running} / ${total}`,
                 cpu: stats.length > 0 ? `${cpuTotal.toFixed(cpuTotal < 10 ? 1 : 0)}%` : "—",
                 memory: stats.length > 0 ? this.formatBytes(memoryTotal) : "—",
-                ports: ports.length > 0 ? `${ports.slice(0, 2).join(" · ")}${ports.length > 2 ? ` +${ports.length - 2}` : ""}` : "—",
-                portTitle: ports.join(", "),
+                ports: portEntries.length > 0 ? portEntries.map(port => port.display).join(", ") : "—",
+                portTitle: portEntries.map(port => `${port.display} → ${port.url}`).join(", "),
+                portEntries,
+                targetEntries,
+                containerDisplay: containerSummary.display,
+                containerTitle: containerSummary.title,
+                internalIPDisplay: internalIPSummary.display,
+                internalIPTitle: targetEntries.map(target => `${target.name}: ${target.internalIP || "—"}`).join(", "),
+                internalIPLabel: internalNetworks.length === 1 ? `${internalNetworks[0]} IP` : this.$t("internalIP"),
+            };
+        },
+        compactValues(values) {
+            const uniqueValues = [ ...new Set(values.filter(Boolean)) ];
+            if (uniqueValues.length === 0) {
+                return {
+                    display: "—",
+                    title: "",
+                };
+            }
+            return {
+                display: `${uniqueValues[0]}${uniqueValues.length > 1 ? ` +${uniqueValues.length - 1}` : ""}`,
+                title: uniqueValues.join(", "),
             };
         },
         parsePercentage(value) {
@@ -582,25 +649,91 @@ export default {
             const value = bytes / (1024 ** unitIndex);
             return `${value.toFixed(value < 10 && unitIndex > 0 ? 1 : 0)} ${units[unitIndex]}`;
         },
-        extractPublishedPorts(statuses) {
-            const ports = new Set();
+        extractPublishedPorts(statuses, stack) {
+            const ports = new Map();
+            const addPort = (publishedValue, targetValue, protocolValue, hostValue = "") => {
+                const published = Number(publishedValue);
+                const target = Number(targetValue);
+                if (!Number.isInteger(published) || published < 1 || published > 65535) {
+                    return;
+                }
+
+                const protocol = String(protocolValue || "tcp").toUpperCase();
+                const host = this.normalizePortHost(hostValue);
+                const targetPort = Number.isInteger(target) && target > 0 && target <= 65535 ? target : null;
+                const key = `${published}:${targetPort || ""}:${protocol}`;
+                if (ports.has(key)) {
+                    return;
+                }
+
+                const display = `${published}${targetPort ? `:${targetPort}` : `/${protocol}`}${targetPort && protocol !== "TCP" ? `/${protocol}` : ""}`;
+                const url = this.buildPortUrl(stack, host, published);
+                ports.set(key, {
+                    key,
+                    display,
+                    protocol,
+                    url,
+                    title: `${url} · ${protocol}`,
+                });
+            };
             for (const status of statuses) {
                 if (Array.isArray(status?.publishers)) {
                     for (const publisher of status.publishers) {
-                        const port = Number(publisher?.PublishedPort ?? publisher?.publishedPort);
-                        if (Number.isInteger(port) && port > 0) {
-                            const protocol = String(publisher?.Protocol ?? publisher?.protocol ?? "tcp").toUpperCase();
-                            ports.add(`${port}/${protocol}`);
-                        }
+                        addPort(
+                            publisher?.PublishedPort ?? publisher?.publishedPort,
+                            publisher?.TargetPort ?? publisher?.targetPort,
+                            publisher?.Protocol ?? publisher?.protocol,
+                            publisher?.URL ?? publisher?.url
+                        );
                     }
                 }
                 if (typeof status?.ports === "string") {
-                    for (const match of status.ports.matchAll(/(?:^|[,:\s])(\d+)->\d+\/(tcp|udp)/gi)) {
-                        ports.add(`${match[1]}/${match[2].toUpperCase()}`);
+                    for (const value of status.ports.split(",")) {
+                        const match = value.trim().match(/^(?:\[([^\]]+)\]|([^:,\s]+)):(\d+)->(\d+)\/(tcp|udp)/i);
+                        if (match) {
+                            addPort(match[3], match[4], match[5], match[1] || match[2]);
+                        }
                     }
                 }
             }
-            return [ ...ports ].sort((a, b) => Number.parseInt(a, 10) - Number.parseInt(b, 10));
+            return [ ...ports.values() ].sort((a, b) => Number.parseInt(a.display, 10) - Number.parseInt(b.display, 10));
+        },
+        normalizePortHost(value) {
+            const host = String(value || "").trim().replace(/^https?:\/\//i, "").replace(/\/$/, "");
+            if (!host || host === "0.0.0.0" || host === "::" || host === "[::]") {
+                return "";
+            }
+            return host.replace(/^\[|\]$/g, "");
+        },
+        buildPortUrl(stack, publishedHost, publishedPort) {
+            let host = this.normalizePortHost(publishedHost);
+            if (!host) {
+                const candidates = [
+                    stack?.primaryHostname,
+                    stack?.endpoint,
+                    this.$root.info?.primaryHostname,
+                    typeof window !== "undefined" ? window.location.hostname : "",
+                ];
+                for (const candidate of candidates) {
+                    const value = String(candidate || "").trim();
+                    if (!value) {
+                        continue;
+                    }
+                    try {
+                        host = this.normalizePortHost(new URL(value.includes("://") ? value : `http://${value}`).hostname);
+                    } catch {
+                        host = this.normalizePortHost(value.split(":")[0]);
+                    }
+                    if (host) {
+                        break;
+                    }
+                }
+            }
+            if (!host) {
+                return "";
+            }
+            const urlHost = host.includes(":") ? `[${host}]` : host;
+            return `http://${urlHost}:${publishedPort}`;
         },
         runStackAction(stack, eventName) {
             this.processingStackKey = this.stackKey(stack);
@@ -611,6 +744,33 @@ export default {
                     this.refreshRuntimeData();
                 }
             });
+        },
+        stackActionTargets(stack) {
+            const targets = this.runtimeSummary(stack).targetEntries;
+            if (targets.length > 0) {
+                return targets.map(target => {
+                    const network = target.internalNetwork || this.$t("internalIP");
+                    return `- ${target.name}${target.internalIP ? ` (${network}: ${target.internalIP})` : ""}`;
+                }).join("\n");
+            }
+
+            const services = Array.isArray(stack.serviceNames) && stack.serviceNames.length > 0
+                ? stack.serviceNames.join(", ")
+                : this.$t("notAvailableShort");
+            return this.$t("runtimeContainerTargetsUnavailable", [ services ]);
+        },
+        stackActionTitle(stack) {
+            return this.$t("wholeStackTargets", [ this.stackActionTargets(stack).replaceAll("\n", ", ") ]);
+        },
+        confirmAndRunStackAction(stack, eventName) {
+            const message = this.$t("confirmWholeStackAction", [
+                this.$t(eventName),
+                stack.name,
+                this.stackActionTargets(stack),
+            ]);
+            if (confirm(message)) {
+                this.runStackAction(stack, eventName);
+            }
         },
         deleteStack(stack) {
             if (!confirm(this.$t("deleteStackMsg"))) {
@@ -953,10 +1113,25 @@ export default {
     gap: 10px;
 }
 
+.stack-name-copy {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+
+    small {
+        color: #60778a;
+        font-family: var(--font-mono);
+        font-size: 0.5rem;
+        letter-spacing: 0;
+        line-height: 1;
+    }
+}
+
 .stack-card-name {
     overflow: hidden;
     color: #f2f5f8;
-    font-size: 1.1rem;
+    font-family: var(--font-body);
+    font-size: 1.15rem;
     font-weight: 750;
     text-decoration: none;
     text-overflow: ellipsis;
@@ -1050,12 +1225,20 @@ export default {
     font-size: 0.5rem;
     letter-spacing: 0.08em;
 
-    span {
+    .telemetry-live-dot {
         width: 5px;
         height: 5px;
         border-radius: 50%;
         background: #34d399;
         box-shadow: 0 0 7px rgba(52, 211, 153, 0.75);
+    }
+
+    strong {
+        margin-left: auto;
+        color: #8ebfdc;
+        font-size: 0.58rem;
+        font-weight: 600;
+        letter-spacing: 0;
     }
 }
 
@@ -1092,7 +1275,7 @@ export default {
     small {
         color: #5d6d7f;
         font-family: var(--font-mono);
-        font-size: 0.46rem;
+        font-size: 0.52rem;
         letter-spacing: 0.06em;
     }
 
@@ -1100,25 +1283,82 @@ export default {
         overflow: hidden;
         color: #d7e6ef;
         font-family: var(--font-mono);
-        font-size: 0.66rem;
+        font-size: 0.72rem;
         font-weight: 620;
         text-overflow: ellipsis;
         white-space: nowrap;
     }
 }
 
-.telemetry-containers,
-.telemetry-cpu {
+.telemetry-port-list {
+    display: flex !important;
+    min-width: 0;
+    flex-direction: row !important;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 3px;
+}
+
+.telemetry-port-link {
+    display: inline-flex;
+    max-width: 100%;
+    align-items: center;
+    gap: 3px;
+    overflow: hidden;
+    padding: 2px 5px;
+    border: 1px solid rgba(122, 153, 177, 0.32);
+    border-radius: 4px;
+    background: rgba(255, 255, 255, 0.045);
+    color: #d7e6ef;
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    text-decoration: none;
+
+    &:hover {
+        border-color: rgba(85, 183, 235, 0.68);
+        background: rgba(85, 183, 235, 0.12);
+        color: #ffffff;
+    }
+
+    strong {
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    > svg {
+        flex: 0 0 auto;
+        color: #75c8ed;
+        font-size: 0.54rem;
+    }
+}
+
+.telemetry-port-more {
+    flex: 0 0 auto;
+}
+
+.telemetry-targets,
+.telemetry-ip,
+.telemetry-cpu,
+.telemetry-memory {
     border-bottom: 1px solid rgba(61, 86, 108, 0.32);
 }
 
-.telemetry-cpu,
+.telemetry-ip,
+.telemetry-memory,
 .telemetry-ports {
     border-right: 0;
 }
 
-.telemetry-containers > svg {
+.telemetry-ports {
+    grid-column: 1 / -1;
+}
+
+.telemetry-targets > svg {
     color: #48c7a1;
+}
+
+.telemetry-ip > svg {
+    color: #62d9f5;
 }
 
 .telemetry-cpu > svg {
@@ -1157,8 +1397,8 @@ export default {
 
 .btn-xs {
     min-height: 27px;
-    padding: 3px 8px;
-    font-size: 0.66rem;
+    padding: 4px 8px;
+    font-size: 0.72rem;
 }
 
 .stack-action {

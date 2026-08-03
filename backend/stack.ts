@@ -134,8 +134,8 @@ export class Stack {
     }
 
     static validateName(name : string) {
-        if (!name.match(/^[a-z0-9_-]+$/)) {
-            throw new ValidationError("Stack name can only contain [a-z][0-9] _ - only");
+        if (!name.match(/^[a-zA-Z0-9_-]+$/)) {
+            throw new ValidationError("Stack name can only contain [a-z][A-Z][0-9] _ - only");
         }
     }
 
@@ -696,9 +696,10 @@ export class Stack {
             const internalIPs = await this.getContainerInternalIPs(containerNames);
             for (const serviceStatuses of statusList.values()) {
                 for (const serviceStatus of serviceStatuses) {
-                    const status = serviceStatus as { name?: unknown; internalIP?: string };
+                    const status = serviceStatus as { name?: unknown; internalIP?: string; internalNetwork?: string };
                     if (typeof status.name === "string" && internalIPs.has(status.name)) {
                         status.internalIP = internalIPs.get(status.name);
+                        status.internalNetwork = this.server.config.defaultExternalNetwork;
                     }
                 }
             }

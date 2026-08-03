@@ -235,26 +235,46 @@ export function resolveRequiredEnvironmentVariable(
     value : string
 ) : string {
     const escapedName = variableName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    const pattern = new RegExp(`\\$\\{${escapedName}:\\?[^}]*\\}`, "g");
+    const pattern = new RegExp(`\\$\\{${escapedName}(?::[?-][^}]*)?\\}`, "g");
     return content.replace(pattern, () => value);
+}
+
+function isIPv4Literal(value : string) : boolean {
+    const parts = value.split(".");
+    return parts.length === 4 && parts.every(part => (
+        /^\d{1,3}$/.test(part) && Number(part) >= 0 && Number(part) <= 255
+    ));
 }
 
 /**
  * The Compose expression used as the host IP of every managed published port.
  * It fails closed at deploy time when the variable is not set.
  */
-export function formatPublishedHostIPExpression(hostIPVariable : string) : string {
+export function formatPublishedHostIPExpression(hostIPVariable : string, fallbackValue = "") : string {
+    const fallback = fallbackValue.trim();
+    if (isIPv4Literal(fallback)) {
+        return `\${${hostIPVariable}:-${fallback}}`;
+    }
     return `\${${hostIPVariable}:?Set ${hostIPVariable} in Dockge Global Variables}`;
+}
+
+export function isPublishedHostIPExpression(value : string | undefined, hostIPVariable : string) : boolean {
+    if (!value) {
+        return false;
+    }
+    const escapedName = hostIPVariable.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    return new RegExp(`^\\$\\{${escapedName}(?::[?-][^}]*)?\\}$`).test(value.trim());
 }
 
 export function formatPublishedPortMapping(
     hostIPVariable : string,
     publishedPort : number,
     targetPort : number,
-    protocol : PublishedPortProtocol
+    protocol : PublishedPortProtocol,
+    fallbackValue = ""
 ) : string {
     const suffix = protocol === "udp" ? "/udp" : "";
-    return `${formatPublishedHostIPExpression(hostIPVariable)}:${publishedPort}:${targetPort}${suffix}`;
+    return `${formatPublishedHostIPExpression(hostIPVariable, fallbackValue)}:${publishedPort}:${targetPort}${suffix}`;
 }
 
 /**

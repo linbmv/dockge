@@ -432,18 +432,22 @@ export class DockgeServer {
 
         if (this.config.defaultExternalNetwork) {
             try {
-                const result = await this.ensureDefaultExternalNetwork();
-                if (result === "created") {
-                    log.info("server", `Created default external network ${this.config.defaultExternalNetwork}.`);
+                const networks = await this.getDockerNetworkList();
+                if (networks.includes(this.config.defaultExternalNetwork)) {
+                    log.info("server", `Default external network ${this.config.defaultExternalNetwork} is available.`);
+                } else {
+                    log.info(
+                        "server",
+                        `Default external network ${this.config.defaultExternalNetwork} is missing; waiting for user confirmation before creating it.`
+                    );
                 }
             } catch (error) {
                 const message = error instanceof Error ? error.message : String(error);
                 log.warn(
                     "server",
-                    `Could not prepare default external network ${this.config.defaultExternalNetwork}; ` +
-                    `the network preset is disabled: ${message}`
+                    `Could not inspect default external network ${this.config.defaultExternalNetwork}; ` +
+                    `it can still be created from the Compose editor: ${message}`
                 );
-                this.config.defaultExternalNetwork = "";
             }
         }
 

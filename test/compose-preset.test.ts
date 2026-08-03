@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { parseDocument } from "yaml";
 import {
+    appendPublishedPortToDoc,
     applyDefaultExternalNetwork,
     applyDefaultExternalNetworkToDoc,
     applyPortRewrites,
@@ -361,6 +362,24 @@ services:
     assert.match(output, /^networks:\n {2}D_Home:\n {4}external: true$/m);
 });
 
+test("document rewrites remain standalone without Dockge global.env", () => {
+    const doc = parseDocument("services:\n  web:\n    ports:\n      - \"8080:80\"\n");
+    const plan = planPortPreset(doc.toJS(), HOST_IP_VARIABLE);
+
+    assert.equal(applyPortRewritesToDoc(doc, plan, [
+        {
+            serviceName: "web",
+            index: 0,
+            publishedPort: 20001,
+        },
+    ], HOST_IP_VARIABLE, "100.64.0.10"), 1);
+    assert.deepEqual(doc.toJS().services.web.ports, [
+        "${TS_HOST_IP:-100.64.0.10}:20001:80",
+    ]);
+    assert.equal(planPortPreset(doc.toJS(), HOST_IP_VARIABLE).rewritable.length, 0);
+    assert.equal(planPortPreset(doc.toJS(), HOST_IP_VARIABLE).skipped[0].skipReason, "alreadyManaged");
+});
+
 test("document network preset supports the mapping form and is idempotent", () => {
     const doc = parseDocument(`services:
   web:
@@ -381,6 +400,30 @@ test("document network preset supports the mapping form and is idempotent", () =
     const before = doc.toString();
     assert.equal(applyDefaultExternalNetworkToDoc(doc, "D_Home"), 0);
     assert.equal(doc.toString(), before);
+});
+
+test("document port append creates or extends ports without rewriting the file", () => {
+    const doc = parseDocument(`# keep this comment
+services:
+  octopus:
+    image: ghcr.io/linbmv/octopus:edge
+`);
+
+    assert.equal(
+        appendPublishedPortToDoc(
+            doc,
+            "octopus",
+            "${TS_HOST_IP:?Set TS_HOST_IP in Dockge Global Variables}:801:8080"
+        ),
+        1
+    );
+    assert.match(doc.toString(), /^# keep this comment/);
+    assert.deepEqual(doc.toJS().services.octopus.ports, [
+        "${TS_HOST_IP:?Set TS_HOST_IP in Dockge Global Variables}:801:8080",
+    ]);
+
+    assert.equal(appendPublishedPortToDoc(doc, "octopus", "801:8080"), 1);
+    assert.equal(appendPublishedPortToDoc(doc, "octopus", "801:8080"), 0);
 });
 
 test("a stale document plan does not clobber a later editor edit", () => {

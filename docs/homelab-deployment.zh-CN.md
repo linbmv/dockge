@@ -125,11 +125,14 @@ Dockge 会从配置区间中选择第一个空闲端口，并写入类似配置�
 
 ```yaml
 ports:
-  - "${TS_HOST_IP:?Set TS_HOST_IP in Dockge Global Variables}:20001:8080"
+  - "${TS_HOST_IP:-100.x.y.z}:20001:8080"
 ```
 
-`${...:?错误信息}` 是故障关闭保护：如果 `TS_HOST_IP` 缺失或为空，Compose
-会终止部署，而不是把端口意外绑定到所有网卡。
+`${TS_HOST_IP:-100.x.y.z}` 是 Docker Compose 标准默认值：Shell 或 Stack
+`.env` 中的 `TS_HOST_IP` 仍然优先；变量缺失时使用生成映射时的当前 Tailnet
+地址。即使以后不再使用 Dockge，直接在 Stack 目录执行
+`docker compose up -d` 也不会依赖父目录的 `global.env`，更不会退化为绑定所有网卡。
+如果该主机的 Tailnet 地址发生变化，应更新变量或映射中的默认值。
 
 分配时会检查：
 
@@ -307,7 +310,8 @@ name: original_project_name
 ## 8. 验收清单
 
 - `docker network inspect D_Home` 成功，cloudflared 和目标应用都在该网络；
-- `global.env` 中只有一个有效的 `TS_HOST_IP` 来源，Stack `.env` 不重复覆盖它；
+- `global.env` 中只有一个有效的 `TS_HOST_IP` 来源；新端口映射包含相同地址的
+  Compose 默认值，脱离 Dockge 后也能独立解析；
 - `docker ps` 显示发布端口绑定为 `100.x.y.z:端口`，而不是
   `0.0.0.0:端口` 或 `[::]:端口`；
 - Cloudflare 使用唯一 DNS 名称加内部端口访问应用；

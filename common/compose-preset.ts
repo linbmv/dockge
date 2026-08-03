@@ -1,5 +1,6 @@
 import {
     formatPublishedHostIPExpression,
+    isPublishedHostIPExpression,
     isPlainPort,
     isWildcardHostIP,
     parseShortPortMapping,
@@ -123,7 +124,7 @@ function servicesOf(config : unknown) : Array<[string, Record<string, unknown>]>
 function classify(
     mapping : ParsedPortMapping | undefined,
     original : string,
-    hostIPExpression : string
+    hostIPVariable : string
 ) : Pick<PortPresetEntry, "target" | "protocol" | "publishedPort" | "hostIP" | "skipReason"> {
     if (!mapping) {
         return {
@@ -140,7 +141,7 @@ function classify(
         publishedPort: parseSinglePort(mapping.published),
     };
 
-    if (mapping.hostIP === hostIPExpression) {
+    if (isPublishedHostIPExpression(mapping.hostIP, hostIPVariable)) {
         // Already pinned to the Tailscale address by a previous preset run.
         return {
             ...base,
@@ -188,7 +189,6 @@ function classify(
  * because they express intent the short form cannot round-trip.
  */
 export function planPortPreset(config : unknown, hostIPVariable : string) : PortPresetPlan {
-    const hostIPExpression = formatPublishedHostIPExpression(hostIPVariable);
     const rewritable : PortPresetEntry[] = [];
     const skipped : PortPresetEntry[] = [];
 
@@ -214,7 +214,7 @@ export function planPortPreset(config : unknown, hostIPVariable : string) : Port
                 serviceName,
                 index,
                 original: item,
-                ...classify(parseShortPortMapping(item), item, hostIPExpression),
+                ...classify(parseShortPortMapping(item), item, hostIPVariable),
             };
             if (entry.skipReason) {
                 skipped.push(entry);
@@ -259,9 +259,10 @@ export function applyPortRewrites(
     config : unknown,
     plan : PortPresetPlan,
     rewrites : PortRewrite[],
-    hostIPVariable : string
+    hostIPVariable : string,
+    hostIPFallback = ""
 ) : number {
-    const hostIPExpression = formatPublishedHostIPExpression(hostIPVariable);
+    const hostIPExpression = formatPublishedHostIPExpression(hostIPVariable, hostIPFallback);
     const planned = new Map<string, PortPresetEntry>();
     for (const entry of plan.rewritable) {
         planned.set(`${entry.serviceName}\0${entry.index}`, entry);
@@ -388,9 +389,10 @@ export function applyPortRewritesToDoc(
     doc : ComposeDocument,
     plan : PortPresetPlan,
     rewrites : PortRewrite[],
-    hostIPVariable : string
+    hostIPVariable : string,
+    hostIPFallback = ""
 ) : number {
-    const hostIPExpression = formatPublishedHostIPExpression(hostIPVariable);
+    const hostIPExpression = formatPublishedHostIPExpression(hostIPVariable, hostIPFallback);
     const planned = new Map<string, PortPresetEntry>();
     for (const entry of plan.rewritable) {
         planned.set(`${entry.serviceName} ${entry.index}`, entry);
@@ -414,6 +416,39 @@ export function applyPortRewritesToDoc(
         changed += 1;
     }
     return changed;
+}
+
+/**
+ * Append one short-syntax published port to a service while preserving the
+ * rest of the pasted document. A non-list `ports` value is left untouched so
+ * the editor can show the Compose shape error instead of silently rewriting it.
+ */
+export function appendPublishedPortToDoc(
+    doc : ComposeDocument,
+    serviceName : string,
+    mapping : string
+) : number {
+    const config = doc.toJS();
+    if (!isPlainObject(config) || !isPlainObject(config.services)) {
+        return 0;
+    }
+
+    const service = config.services[serviceName];
+    if (!isPlainObject(service)) {
+        return 0;
+    }
+
+    const path = [ "services", serviceName, "ports" ];
+    if (service.ports === undefined || service.ports === null) {
+        doc.setIn(path, doc.createNode([ mapping ]));
+        return 1;
+    }
+    if (!Array.isArray(service.ports) || service.ports.includes(mapping)) {
+        return 0;
+    }
+
+    doc.addIn(path, mapping);
+    return 1;
 }
 
 /**

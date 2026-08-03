@@ -226,9 +226,10 @@ DOCKGE_PUBLISHED_PORT_END=39999
 - Collision discovery includes all Docker containers, saved Dockge Stack
   files (including ordinary `.env`/`global.env` substitutions), ports in the
   current unsaved editor, and short-lived in-process reservations.
-- Allocation is conservative across host addresses and persists a fail-closed
-  Compose mapping such as
-  `${TS_HOST_IP:?Set TS_HOST_IP in Dockge Global Variables}:20001:8080`.
+- Allocation is conservative across host addresses and persists a portable
+  Compose mapping such as `${TS_HOST_IP:-100.64.0.10}:20001:8080`. The variable
+  remains overrideable, while the current address lets a Stack run without
+  Dockge's parent-directory `global.env` injection.
 - If a saved Stack cannot be parsed for collision detection, allocation fails
   explicitly instead of guessing that its ports are free.
 - Host-native listeners are outside the Dockge container's network namespace;

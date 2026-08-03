@@ -64,6 +64,14 @@ test("formats persistent Tailscale host mappings", () => {
         formatPublishedPortMapping("TS_HOST_IP", 22001, 53, "udp"),
         "${TS_HOST_IP:?Set TS_HOST_IP in Dockge Global Variables}:22001:53/udp"
     );
+    assert.equal(
+        formatPublishedPortMapping("TS_HOST_IP", 22002, 8080, "tcp", "100.64.0.10"),
+        "${TS_HOST_IP:-100.64.0.10}:22002:8080"
+    );
+    assert.equal(
+        formatPublishedPortMapping("TS_HOST_IP", 22003, 8080, "tcp", "not-an-ip"),
+        "${TS_HOST_IP:?Set TS_HOST_IP in Dockge Global Variables}:22003:8080"
+    );
 });
 
 test("selects the first free port while keeping TCP and UDP independent", () => {
@@ -83,9 +91,9 @@ test("selects the first free port while keeping TCP and UDP independent", () => 
 });
 
 test("resolves only the required host variable for frontend preview", () => {
-    const yaml = "ports:\n  - \"${TS_HOST_IP:?Set TS_HOST_IP in Dockge Global Variables}:20001:8080\"\n";
+    const yaml = "ports:\n  - \"${TS_HOST_IP:?Set TS_HOST_IP in Dockge Global Variables}:20001:8080\"\n  - \"${TS_HOST_IP:-100.64.0.1}:20002:8080\"\n";
     assert.equal(
         resolveRequiredEnvironmentVariable(yaml, "TS_HOST_IP", "100.64.0.10"),
-        "ports:\n  - \"100.64.0.10:20001:8080\"\n"
+        "ports:\n  - \"100.64.0.10:20001:8080\"\n  - \"100.64.0.10:20002:8080\"\n"
     );
 });

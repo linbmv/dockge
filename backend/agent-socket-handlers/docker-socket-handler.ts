@@ -566,9 +566,38 @@ export class DockerSocketHandler extends AgentSocketHandler {
             }
         });
 
+        agentSocket.on("ensureDefaultExternalNetwork", async (callback) => {
+            try {
+                checkLogin(socket);
+                if (!server.config.defaultExternalNetwork) {
+                    throw new ValidationError("No default external network is configured.");
+                }
+
+                const result = await server.ensureDefaultExternalNetwork();
+                callbackResult({
+                    ok: true,
+                    result,
+                    defaultExternalNetwork: server.config.defaultExternalNetwork,
+                    defaultExternalNetworkExists: true,
+                }, callback);
+            } catch (e) {
+                callbackError(e, callback);
+            }
+        });
+
         agentSocket.on("getStackDefaults", async (callback) => {
             try {
                 checkLogin(socket);
+                let defaultExternalNetworkExists = false;
+                if (server.config.defaultExternalNetwork) {
+                    try {
+                        const dockerNetworkList = await server.getDockerNetworkList();
+                        defaultExternalNetworkExists = dockerNetworkList.includes(server.config.defaultExternalNetwork);
+                    } catch {
+                        // Keep the editor usable while Docker is unavailable. The
+                        // explicit create action will report the actionable error.
+                    }
+                }
                 let internalIPDefaults = {
                     networkName: server.config.defaultExternalNetwork,
                     subnet: "",
@@ -584,6 +613,7 @@ export class DockerSocketHandler extends AgentSocketHandler {
                     ok: true,
                     defaults: {
                         defaultExternalNetwork: server.config.defaultExternalNetwork,
+                        defaultExternalNetworkExists,
                         publishedHostIPVariable: server.config.publishedHostIPVariable,
                         publishedHostIPValue: server.getPublishedHostIPValue(),
                         publishedPortStart: server.config.publishedPortStart,
@@ -612,10 +642,25 @@ export class DockerSocketHandler extends AgentSocketHandler {
             }
         });
 
-        agentSocket.on("allocatePublishedPort", async (targetPort : unknown, protocol : unknown, currentEditorPorts : unknown, callback) => {
+        agentSocket.on("allocatePublishedPort", async (
+            targetPort : unknown,
+            protocol : unknown,
+            currentEditorPorts : unknown,
+            requestedPublishedPortOrCallback : unknown,
+            callbackMaybe : unknown
+        ) => {
+            const hasRequestedPort = typeof requestedPublishedPortOrCallback !== "function";
+            const requestedPublishedPort = hasRequestedPort ? requestedPublishedPortOrCallback : undefined;
+            const callback = (hasRequestedPort ? callbackMaybe : requestedPublishedPortOrCallback) as unknown;
             try {
                 checkLogin(socket);
-                const allocation = await allocatePublishedPort(server, targetPort, protocol, currentEditorPorts);
+                const allocation = await allocatePublishedPort(
+                    server,
+                    targetPort,
+                    protocol,
+                    currentEditorPorts,
+                    requestedPublishedPort
+                );
                 callbackResult({
                     ok: true,
                     allocation,
